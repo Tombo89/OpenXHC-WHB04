@@ -16,6 +16,10 @@ static TIM_HandleTypeDef htim_encoder;
 static uint16_t enc_prev_cnt = 0;
 static int32_t enc_rem = 0; /* Rest-Impulse (0..3) */
 
+/* Globale Variablen für 1ms Abtastung */
+static volatile int16_t encoder_1ms_buffer = 0;
+static volatile uint8_t encoder_data_ready = 0;
+
 /**
  * @brief Encoder Hardware initialisieren
  *
@@ -74,7 +78,7 @@ void encoder_init(void)
 }
 
 /**
- * @brief Encoder-Wert lesen (Rastungen)
+ * @brief Encoder-Wert lesen (Rastungen) - optimiert für Responsivität
  * @return Anzahl Rastungen seit letztem Aufruf (-127 bis +127)
  */
 int16_t encoder_read(void)
@@ -92,7 +96,21 @@ int16_t encoder_read(void)
     int16_t detents = (int16_t)(enc_rem / 4);
     enc_rem -= (int32_t)detents * 4; /* Rest für nächste Abfrage */
 
+    /* Begrenzen auf USB-Übertragungsbereich */
+    if (detents > 127) detents = 127;
+    if (detents < -127) detents = -127;
+
     return detents;
+}
+
+/**
+ * @brief Prüft ob Encoder-Aktivität vorhanden ist (ohne Wert zu konsumieren)
+ * @return 1 wenn Encoder bewegt wurde, 0 wenn keine Änderung
+ */
+uint8_t encoder_has_activity(void)
+{
+    uint16_t cur = (uint16_t)__HAL_TIM_GET_COUNTER(&htim_encoder);
+    return (cur != enc_prev_cnt) ? 1 : 0;
 }
 
 /**
@@ -127,6 +145,26 @@ void encoder_display_test(void)
     ST7735_WriteString(0, 140, text, Font_7x10, RED, BLACK);
 }
 
+/**
+ * @brief Zeigt gesendete Encoder-Werte an (für USB-Debug)
+ */
+void encoder_display_sent_values(void)
+{
+    static int16_t last_sent_value = 0;
+    static uint32_t send_counter = 0;
+
+    int16_t current_detents = encoder_read();
+
+    if (current_detents != 0) {
+        last_sent_value = current_detents;
+        send_counter++;
+    }
+
+    char text[32];
+    sprintf(text, "Sent: %d (#%d)", (int)last_sent_value, (int)send_counter);
+    ST7735_WriteString(0, 150, text, Font_7x10, GREEN, BLACK);
+}
+
 /*
  * INTEGRATION IN CUBEMX:
  *
@@ -150,3 +188,70 @@ void encoder_display_test(void)
  * 5. In xhc_main_loop() echte Encoder-Werte verwenden:
  *    int8_t wheel_value = (int8_t)encoder_read(); // Statt 0
  */
+
+
+/**
+ * @brief 1ms Encoder-Abtastung (wird von SysTick aufgerufen)
+ *
+ * WICHTIG: Dieser Code läuft im Interrupt-Kontext!
+ * Deshalb nur minimale, schnelle Operationen.
+ */
+void encoder_1ms_poll(void)
+{
+    static uint16_t last_count = 0;
+    static int32_t impulse_buffer = 0;
+
+    /* Schnelle Register-Abfrage */
+    uint16_t current_count = TIM2->CNT;
+    int16_t diff = (int16_t)(current_count - last_count);
+    last_count = current_count;
+
+    if (diff != 0) {
+        /* Impulse sammeln */
+        impulse_buffer += diff;
+
+        /* 4 Impulse = 1 Rastung */
+        int16_t detents = (int16_t)(impulse_buffer / 4);
+        if (detents != 0) {
+            impulse_buffer -= detents * 4;
+
+            /* Atomic update */
+            __disable_irq();
+            encoder_1ms_buffer += detents;
+            encoder_data_ready = 1;
+            __enable_irq();
+        }
+    }
+}
+
+/**
+ * @brief Encoder-Werte aus 1ms-Abtastung lesen
+ * @return Akkumulierte Rastungen seit letztem Aufruf
+ */
+int16_t encoder_read_1ms(void)
+{
+    int16_t result = 0;
+
+    /* Atomic read */
+    __disable_irq();
+    if (encoder_data_ready) {
+        result = encoder_1ms_buffer;
+        encoder_1ms_buffer = 0;
+        encoder_data_ready = 0;
+    }
+    __enable_irq();
+
+    /* Begrenzen */
+    if (result > 127) result = 127;
+    if (result < -127) result = -127;
+
+    return result;
+}
+
+/**
+ * @brief Prüft ob neue Encoder-Daten verfügbar
+ */
+uint8_t encoder_1ms_has_data(void)
+{
+    return encoder_data_ready;
+}
