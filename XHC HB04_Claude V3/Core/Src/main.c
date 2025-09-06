@@ -30,6 +30,7 @@
 #include "encoder_cubeide.h"
 #include "button_matrix.h"
 #include "rotary_switch.h"
+#include "xhc_display_ui.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -107,13 +108,17 @@ int main(void)
   MX_USB_DEVICE_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
+  ST7735_Init(3);
+
+
   xhc_custom_hid_init();
   encoder_init();
   button_matrix_init();
   rotary_switch_init();
+  xhc_ui_init();
 
-  ST7735_Init(3);
-  fillScreen(BLACK);
+
+  //fillScreen(WHITE);
   //testAll();
   /* USER CODE END 2 */
 
@@ -124,7 +129,7 @@ int main(void)
 	  xhc_main_loop();
 	  //encoder_display_test();
 	  //button_matrix_display_test();
-	  rotary_switch_display_test();// <- NEU: Button-Test
+	  //rotary_switch_display_test();// <- NEU: Button-Test
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

@@ -75,20 +75,12 @@ void xhc_main_loop(void)
         wheel_value = (int8_t)encoder_detents;
     }
 
-    /* Debug: Zeige encoder_1ms Status */
-    char debug_text[32];
-    sprintf(debug_text, "1ms_data: %d val: %d", encoder_1ms_has_data(), wheel_value);
-    ST7735_WriteString(0, 180, debug_text, Font_7x10, MAGENTA, BLACK);
 
     /* Prüfe auf Änderungen */
 
     // Encoder-Änderung? (Ändere die Bedingung)
     if (encoder_1ms_has_data() || wheel_value != 0) {  // Beide Bedingungen prüfen
         state_changed = 1;
-
-        /* Debug: Zeige Encoder-Aktivität */
-        sprintf(debug_text, "ENC ACTIVE: %d", wheel_value);
-        ST7735_WriteString(0, 190, debug_text, Font_7x10, RED, BLACK);
     }
 
     // Tasten-Änderung?
@@ -104,23 +96,15 @@ void xhc_main_loop(void)
         last_wheel_mode = wheel_mode;
     }
 
-    /* Debug: Zeige state_changed Status */
-    sprintf(debug_text, "state_changed: %d", state_changed);
-    ST7735_WriteString(0, 200, debug_text, Font_7x10, CYAN, BLACK);
 
     /* Sende NUR bei echten Änderungen */
     if (state_changed) {
         xhc_send_input_report(btn1, btn2, wheel_mode, wheel_value);
 
-        /* Debug: Zeige gesendete Daten auf Display */
-        sprintf(debug_text, "TX: %02X %02X %02X %d", btn1, btn2, wheel_mode, wheel_value);
-        ST7735_WriteString(0, 160, debug_text, Font_7x10, YELLOW, BLACK);
 
         /* Zähler für gesendete Pakete */
         static uint32_t tx_counter = 0;
         tx_counter++;
-        sprintf(debug_text, "TX Count: %d", (int)tx_counter);
-        ST7735_WriteString(0, 170, debug_text, Font_7x10, GREEN, BLACK);
     }
 }
 

@@ -7,6 +7,8 @@
 #include <string.h>
 #include "ST7735.h"
 #include <stdio.h>
+#include "xhc_display_ui.h"
+#include "rotary_switch.h"
 
 /* Konstanten für den Empfang */
 #define TMP_BUFF_SIZE   42
@@ -78,24 +80,10 @@ void xhc_recv(uint8_t *data)
 void xhc_process_received_data(void)
 {
 
-
+	xhc_ui_update_coordinates();
+	xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
     char text[32];
 
-    // Einfacher Test: Zeige X-Position
-    sprintf(text, "X: %d.%04d", output_report.pos[0].p_int, output_report.pos[0].p_frac);
-
-    ST7735_WriteString(0, 0, text, Font_7x10, RED,BLACK);
-
-    // Zeige ob Daten gültig sind
-    sprintf(text, "Magic: 0x%04X", output_report.magic);
-    ST7735_WriteString(0, 30, text, Font_7x10, RED,BLACK);;
-    /* Hier können die empfangenen Daten verarbeitet werden:
-     * - LCD-Display aktualisieren
-     * - LEDs ansteuern
-     * - Position anzeigen
-     * - Geschwindigkeiten anzeigen
-     * - etc.
-     */
 
     /* Debug-Callback aufrufen */
     #ifdef XHC_DEBUG_ENABLED
