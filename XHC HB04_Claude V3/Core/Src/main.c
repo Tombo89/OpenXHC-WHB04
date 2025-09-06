@@ -29,6 +29,7 @@
 #include "GFX_FUNCTIONS.h"
 #include "encoder_cubeide.h"
 #include "button_matrix.h"
+#include "rotary_switch.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -107,8 +108,9 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   xhc_custom_hid_init();
-  encoder_init();  // Encoder initialisieren
+  encoder_init();
   button_matrix_init();
+  rotary_switch_init();
 
   ST7735_Init(3);
   fillScreen(BLACK);
@@ -120,8 +122,9 @@ int main(void)
   while (1)
   {
 	  xhc_main_loop();
-	  encoder_display_test();
-	  button_matrix_display_test();  // <- NEU: Button-Test
+	  //encoder_display_test();
+	  //button_matrix_display_test();
+	  rotary_switch_display_test();// <- NEU: Button-Test
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

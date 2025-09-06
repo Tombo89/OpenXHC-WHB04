@@ -8,6 +8,7 @@
 #include "ST7735.h"
 #include "encoder_cubeide.h"
 #include "button_matrix.h"
+#include "rotary_switch.h"
 
 /* Externe Variablen */
 extern USBD_HandleTypeDef hUsbDeviceFS;
@@ -59,7 +60,7 @@ void xhc_main_loop(void)
     uint8_t btn1, btn2;
     button_matrix_scan(&btn1, &btn2);  // Echte Button-Matrix
 
-    uint8_t wheel_mode = 0x11;  // TODO: Rotary-Switch Position
+    uint8_t wheel_mode = rotary_switch_read();  // Echter Rotary Switch
 
     /* 1ms Encoder-Wert lesen */
     int16_t encoder_detents = encoder_read_1ms();  // Neue 1ms Funktion
