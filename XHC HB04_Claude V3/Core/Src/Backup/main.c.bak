@@ -22,7 +22,11 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "xhc_receive.h"
+#include "XHC_DataStructures.h"
+#include "xhc_main.h"
+#include "ST7735.h"
+#include "GFX_FUNCTIONS.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -46,7 +50,11 @@ SPI_HandleTypeDef hspi1;
 TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
-
+/* XHC HB04 Variablen */
+extern struct whb04_out_data output_report;
+extern struct whb0x_in_data in_report;
+extern volatile uint32_t debug_setreport_calls;
+extern volatile uint32_t debug_outevent_calls;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -96,13 +104,32 @@ int main(void)
   MX_USB_DEVICE_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
+  xhc_custom_hid_init();
 
+  ST7735_Init(3);
+  fillScreen(BLACK);
+  //testAll();
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  xhc_main_loop();
+
+	  // Display-Status alle 500ms aktualisieren
+	    static uint32_t last_display = 0;
+	    if (HAL_GetTick() - last_display > 500) {
+	    	fillScreen(BLACK);
+	      char text[32];
+	      sprintf(text, "SetRep: %d", (int)debug_setreport_calls);
+	      ST7735_WriteString(0, 60, text, Font_7x10, RED,BLACK);
+
+	      sprintf(text, "OutEvt: %d", (int)debug_outevent_calls);
+	      ST7735_WriteString(0, 80, text, Font_7x10, RED,BLACK);
+
+	      last_display = HAL_GetTick();
+	    }
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -301,6 +328,23 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
+
+/**
+ * @brief Debug-Funktion für empfangene XHC-Daten
+ */
+void xhc_debug_received_data(void)
+{
+  /* Diese Funktion kann in xhc_process_received_data() aufgerufen werden */
+
+
+
+  /* Oder Debug-Ausgabe über UART */
+  printf("XHC Data: Magic=0x%04X, Day=%d, X=%d.%d\r\n",
+         output_report.magic,
+         output_report.day,
+         output_report.pos[0].p_int,
+         output_report.pos[0].p_frac);
+}
 /* USER CODE END 4 */
 
 /**

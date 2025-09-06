@@ -27,6 +27,7 @@
 #include "xhc_main.h"
 #include "ST7735.h"
 #include "GFX_FUNCTIONS.h"
+#include "encoder_cubeide.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -105,6 +106,7 @@ int main(void)
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
   xhc_custom_hid_init();
+  encoder_init();  // Encoder initialisieren
 
   ST7735_Init(3);
   fillScreen(BLACK);
@@ -117,16 +119,17 @@ int main(void)
   {
 	  xhc_main_loop();
 
-	  // Display-Status alle 500ms aktualisieren
+	  encoder_display_test();
+
+	  // Debug-Status (falls noch aktiv)
 	    static uint32_t last_display = 0;
 	    if (HAL_GetTick() - last_display > 500) {
-	    	fillScreen(BLACK);
 	      char text[32];
 	      sprintf(text, "SetRep: %d", (int)debug_setreport_calls);
-	      ST7735_WriteString(0, 60, text, Font_7x10, RED,BLACK);
+	      ST7735_WriteString(0, 100, text, Font_7x10, RED, BLACK);
 
 	      sprintf(text, "OutEvt: %d", (int)debug_outevent_calls);
-	      ST7735_WriteString(0, 80, text, Font_7x10, RED,BLACK);
+	      ST7735_WriteString(0, 115, text, Font_7x10, RED, BLACK);
 
 	      last_display = HAL_GetTick();
 	    }
@@ -245,7 +248,7 @@ static void MX_TIM2_Init(void)
   htim2.Init.Period = 65535;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  sConfig.EncoderMode = TIM_ENCODERMODE_TI1;
+  sConfig.EncoderMode = TIM_ENCODERMODE_TI12;
   sConfig.IC1Polarity = TIM_ICPOLARITY_RISING;
   sConfig.IC1Selection = TIM_ICSELECTION_DIRECTTI;
   sConfig.IC1Prescaler = TIM_ICPSC_DIV1;
