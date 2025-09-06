@@ -28,6 +28,7 @@
 #include "ST7735.h"
 #include "GFX_FUNCTIONS.h"
 #include "encoder_cubeide.h"
+#include "button_matrix.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -107,6 +108,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   xhc_custom_hid_init();
   encoder_init();  // Encoder initialisieren
+  button_matrix_init();
 
   ST7735_Init(3);
   fillScreen(BLACK);
@@ -118,21 +120,8 @@ int main(void)
   while (1)
   {
 	  xhc_main_loop();
-
 	  encoder_display_test();
-
-	  // Debug-Status (falls noch aktiv)
-	    static uint32_t last_display = 0;
-	    if (HAL_GetTick() - last_display > 500) {
-	      char text[32];
-	      sprintf(text, "SetRep: %d", (int)debug_setreport_calls);
-	      ST7735_WriteString(0, 100, text, Font_7x10, RED, BLACK);
-
-	      sprintf(text, "OutEvt: %d", (int)debug_outevent_calls);
-	      ST7735_WriteString(0, 115, text, Font_7x10, RED, BLACK);
-
-	      last_display = HAL_GetTick();
-	    }
+	  button_matrix_display_test();  // <- NEU: Button-Test
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */

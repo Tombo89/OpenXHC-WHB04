@@ -7,6 +7,7 @@
 #include <string.h>
 #include "ST7735.h"
 #include "encoder_cubeide.h"
+#include "button_matrix.h"
 
 /* Externe Variablen */
 extern USBD_HandleTypeDef hUsbDeviceFS;
@@ -55,8 +56,9 @@ void xhc_main_loop(void)
     uint8_t state_changed = 0;  // Flag für Änderungen
 
     /* Aktuelle Input-Daten lesen */
-    uint8_t btn1 = 0;           // TODO: Tasteneingaben vom Keyboard-Matrix
-    uint8_t btn2 = 0;           // TODO: Tasteneingaben vom Keyboard-Matrix
+    uint8_t btn1, btn2;
+    button_matrix_scan(&btn1, &btn2);  // Echte Button-Matrix
+
     uint8_t wheel_mode = 0x11;  // TODO: Rotary-Switch Position
 
     /* 1ms Encoder-Wert lesen */
