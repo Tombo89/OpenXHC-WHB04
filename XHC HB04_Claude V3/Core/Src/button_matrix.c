@@ -5,7 +5,6 @@
 
 #include "main.h"
 #include "button_matrix.h"
-#include "ST7735.h"
 #include "stdio.h"
 
 /* Button-Matrix Hardware-Konfiguration */
@@ -141,7 +140,7 @@ uint8_t button_matrix_scan(uint8_t *btn1, uint8_t *btn2)
 
     /* Entprellung: Mindestens 20ms zwischen Scans */
     uint32_t current_time = HAL_GetTick();
-    if (current_time - last_scan_time < 20) {
+    if (current_time - last_scan_time < 50) {
         *btn1 = last_btn1;
         if (btn2) *btn2 = last_btn2;
         return (last_btn1 != 0) ? ((last_btn2 != 0) ? 2 : 1) : 0;
@@ -158,7 +157,7 @@ uint8_t button_matrix_scan(uint8_t *btn1, uint8_t *btn2)
         set_row_low(row);
 
         /* Kurze Verzögerung für Signal-Stabilisierung */
-        for (volatile int i = 0; i < 50; i++) __NOP();
+        for (volatile int i = 0; i < 10; i++) __NOP();
 
         /* Scanne alle Spalten in dieser Zeile */
         for (uint8_t col = 0; col < 4; col++) {
@@ -193,35 +192,7 @@ scan_complete:
 /**
  * @brief Test-Funktion: Zeigt Button-Status auf Display mit mehr Details
  */
-void button_matrix_display_test(void)
-{
-    uint8_t btn1, btn2;
-    uint8_t count = button_matrix_scan(&btn1, &btn2);
 
-    char text[32];
-    sprintf(text, "Buttons: %d", count);
-    ST7735_WriteString(0, 70, text, Font_7x10, CYAN, BLACK);
-
-    if (count > 0) {
-        sprintf(text, "Btn1: 0x%02X", btn1);
-        ST7735_WriteString(0, 80, text, Font_7x10, CYAN, BLACK);
-
-        if (count > 1) {
-            sprintf(text, "Btn2: 0x%02X", btn2);
-            ST7735_WriteString(0, 90, text, Font_7x10, CYAN, BLACK);
-        } else {
-            ST7735_WriteString(0, 90, "Btn2: --", Font_7x10, CYAN, BLACK);
-        }
-    } else {
-        ST7735_WriteString(0, 80, "Btn1: --", Font_7x10, CYAN, BLACK);
-        ST7735_WriteString(0, 90, "Btn2: --", Font_7x10, CYAN, BLACK);
-    }
-
-    /* Zeige last_btn Werte für Debug */
-    extern uint8_t last_btn1, last_btn2;  // Zugriff auf static vars
-    sprintf(text, "Last: %02X %02X", last_btn1, last_btn2);
-    ST7735_WriteString(0, 100, text, Font_7x10, WHITE, BLACK);
-}
 
 /*
  * INTEGRATION IN CUBEMX:

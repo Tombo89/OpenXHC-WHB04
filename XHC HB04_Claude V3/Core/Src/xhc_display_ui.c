@@ -85,7 +85,7 @@ void xhc_ui_update_coordinates(void)
     uint8_t my_negative = (my_frac & 0x8000) ? 1 : 0;
     my_frac &= 0x7FFF;
 
-    sprintf(text, "%5d.%04d", my_negative ? -(int)output_report.pos[4].p_int : (int)output_report.pos[5].p_int, my_frac);
+    sprintf(text, "%5d.%04d", my_negative ? -(int)output_report.pos[4].p_int : (int)output_report.pos[4].p_int, my_frac);
     ST7735_WriteString(60, 65, text, Font_7x10, BLACK, WHITE);
 
     // MC Z
@@ -95,6 +95,25 @@ void xhc_ui_update_coordinates(void)
 
     sprintf(text, "%5d.%04d", mz_negative ? -(int)output_report.pos[5].p_int : (int)output_report.pos[5].p_int, mz_frac);
     ST7735_WriteString(60, 80, text, Font_7x10, BLACK, WHITE);
+
+
+    /* === DEBUG: Host→Device Geschwindigkeits-Daten === */
+
+    /* Feedrate */
+    sprintf(text, "F:%d", output_report.feedrate);
+    ST7735_WriteString(35, 112, text, Font_7x10, BLACK, WHITE);
+
+    /* Feedrate Override */
+    sprintf(text, "FOv:%d", output_report.feedrate_ovr);
+    ST7735_WriteString(80, 112, text, Font_7x10, BLACK, WHITE);
+
+    /* Spindle Speed */
+    //sprintf(text, "S:%d", output_report.sspeed);
+    //ST7735_WriteString(80, 110, text, Font_7x10, BLACK, WHITE);
+
+    /* Spindle Override */
+    //sprintf(text, "SOv:%d", output_report.sspeed_ovr);
+    //ST7735_WriteString(120, 110, text, Font_7x10, BLACK, WHITE);
 }
 
 void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
@@ -134,22 +153,6 @@ void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
     sprintf(text, "%s  ", step_text);
     ST7735_WriteString(120, 98, text, Font_7x10, WHITE, BLUE);
 
-    /* === DEBUG: Host→Device Geschwindigkeits-Daten === */
 
-    /* Feedrate */
-    sprintf(text, "F:%d", output_report.feedrate);
-    ST7735_WriteString(35, 112, text, Font_7x10, BLACK, WHITE);
-
-    /* Feedrate Override */
-    sprintf(text, "FOv:%d", output_report.feedrate_ovr);
-    ST7735_WriteString(80, 112, text, Font_7x10, BLACK, WHITE);
-
-    /* Spindle Speed */
-    //sprintf(text, "S:%d", output_report.sspeed);
-    //ST7735_WriteString(80, 110, text, Font_7x10, BLACK, WHITE);
-
-    /* Spindle Override */
-    //sprintf(text, "SOv:%d", output_report.sspeed_ovr);
-    //ST7735_WriteString(120, 110, text, Font_7x10, BLACK, WHITE);
 }
 

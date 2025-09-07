@@ -127,6 +127,7 @@ int main(void)
   while (1)
   {
 	  xhc_main_loop();
+	  //xhc_main_loop_encoder_only();
 	  //encoder_display_test();
 	  //button_matrix_display_test();
 	  //rotary_switch_display_test();// <- NEU: Button-Test

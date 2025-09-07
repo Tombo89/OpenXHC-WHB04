@@ -184,11 +184,12 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   /* USER CODE BEGIN SysTick_IRQn 0 */
-	encoder_1ms_poll();
+
   /* USER CODE END SysTick_IRQn 0 */
   HAL_IncTick();
   /* USER CODE BEGIN SysTick_IRQn 1 */
-
+  extern void encoder_1ms_poll(void);
+  encoder_1ms_poll();
   /* USER CODE END SysTick_IRQn 1 */
 }
 
