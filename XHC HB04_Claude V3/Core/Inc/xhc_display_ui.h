@@ -11,5 +11,7 @@
 void xhc_ui_init(void);
 void xhc_ui_update_coordinates(void);
 void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul);
+void format_coordinate(char* text, int value, uint16_t frac, uint8_t negative);
+
 
 #endif /* XHC_DISPLAY_UI_H */

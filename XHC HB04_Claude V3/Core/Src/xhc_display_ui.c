@@ -96,75 +96,110 @@ void xhc_ui_update_coordinates(void)
 {
     char text[20];
 
-    /* WC-Koordinaten mit Vorzeichen-Behandlung */
+    // Statische Variablen für Cache
+    static int32_t last_wc_x_int = -999999, last_wc_y_int = -999999, last_wc_z_int = -999999;
+    static int32_t last_mc_x_int = -999999, last_mc_y_int = -999999, last_mc_z_int = -999999;
+    static uint16_t last_wc_x_frac = 0xFFFF, last_wc_y_frac = 0xFFFF, last_wc_z_frac = 0xFFFF;
+    static uint16_t last_mc_x_frac = 0xFFFF, last_mc_y_frac = 0xFFFF, last_mc_z_frac = 0xFFFF;
 
-    // X-Koordinate WC
+    // WC X - nur update wenn geändert
     uint16_t x_frac = output_report.pos[0].p_frac;
-    uint8_t x_negative = (x_frac & 0x8000) ? 1 : 0;  // MSB = Vorzeichen
-    x_frac &= 0x7FFF;  // Vorzeichen-Bit entfernen
+    uint8_t x_negative = (x_frac & 0x8000) ? 1 : 0;
+    x_frac &= 0x7FFF;
+    int32_t wc_x_int = x_negative ? -(int32_t)output_report.pos[0].p_int : (int32_t)output_report.pos[0].p_int;
 
-    format_coordinate(text, (int)output_report.pos[0].p_int, x_frac, x_negative);
-    ST7735_WriteString_GFX(65, 2, text, &dosis_bold8pt7b, BLACK, WHITE);
+    if (wc_x_int != last_wc_x_int || x_frac != last_wc_x_frac) {
+        format_coordinate(text, (int)output_report.pos[0].p_int, x_frac, x_negative);
+        ST7735_WriteString_GFX(65, 2, text, &dosis_bold8pt7b, BLACK, WHITE);
+        last_wc_x_int = wc_x_int;
+        last_wc_x_frac = x_frac;
+    }
 
-    // Y-Koordinate WC
+    // WC Y - nur update wenn geändert
     uint16_t y_frac = output_report.pos[1].p_frac;
     uint8_t y_negative = (y_frac & 0x8000) ? 1 : 0;
     y_frac &= 0x7FFF;
+    int32_t wc_y_int = y_negative ? -(int32_t)output_report.pos[1].p_int : (int32_t)output_report.pos[1].p_int;
 
-    format_coordinate(text, (int)output_report.pos[1].p_int, y_frac, y_negative);
-    ST7735_WriteString_GFX(65, 17, text, &dosis_bold8pt7b, BLACK, WHITE);
+    if (wc_y_int != last_wc_y_int || y_frac != last_wc_y_frac) {
+        format_coordinate(text, (int)output_report.pos[1].p_int, y_frac, y_negative);
+        ST7735_WriteString_GFX(65, 17, text, &dosis_bold8pt7b, BLACK, WHITE);
+        last_wc_y_int = wc_y_int;
+        last_wc_y_frac = y_frac;
+    }
 
-    // Z-Koordinate WC
+    // WC Z - nur update wenn geändert
     uint16_t z_frac = output_report.pos[2].p_frac;
     uint8_t z_negative = (z_frac & 0x8000) ? 1 : 0;
     z_frac &= 0x7FFF;
+    int32_t wc_z_int = z_negative ? -(int32_t)output_report.pos[2].p_int : (int32_t)output_report.pos[2].p_int;
 
-    format_coordinate(text, (int)output_report.pos[2].p_int, z_frac, z_negative);
-    ST7735_WriteString_GFX(65, 32, text, &dosis_bold8pt7b, BLACK, WHITE);
+    if (wc_z_int != last_wc_z_int || z_frac != last_wc_z_frac) {
+        sprintf(text, "%6d.%04d", z_negative ? -(int)output_report.pos[2].p_int : (int)output_report.pos[2].p_int, z_frac);
+        ST7735_WriteString_GFX(65, 32, text, &dosis_bold8pt7b, BLACK, WHITE);
+        last_wc_z_int = wc_z_int;
+        last_wc_z_frac = z_frac;
+    }
 
-    /* MC-Koordinaten (gleiche Logik) */
-
+    // MC Koordinaten - gleiche Logik
     // MC X
     uint16_t mx_frac = output_report.pos[3].p_frac;
     uint8_t mx_negative = (mx_frac & 0x8000) ? 1 : 0;
     mx_frac &= 0x7FFF;
+    int32_t mc_x_int = mx_negative ? -(int32_t)output_report.pos[3].p_int : (int32_t)output_report.pos[3].p_int;
 
-    format_coordinate(text, (int)output_report.pos[3].p_int, mx_frac, mx_negative);
-    ST7735_WriteString_GFX(65, 49, text, &dosis_bold8pt7b, BLACK, WHITE);
+    if (mc_x_int != last_mc_x_int || mx_frac != last_mc_x_frac) {
+        sprintf(text, "%6d.%04d", mx_negative ? -(int)output_report.pos[3].p_int : (int)output_report.pos[3].p_int, mx_frac);
+        ST7735_WriteString_GFX(65, 49, text, &dosis_bold8pt7b, BLACK, WHITE);
+        last_mc_x_int = mc_x_int;
+        last_mc_x_frac = mx_frac;
+    }
 
     // MC Y
     uint16_t my_frac = output_report.pos[4].p_frac;
     uint8_t my_negative = (my_frac & 0x8000) ? 1 : 0;
     my_frac &= 0x7FFF;
+    int32_t mc_y_int = my_negative ? -(int32_t)output_report.pos[4].p_int : (int32_t)output_report.pos[4].p_int;
 
-    format_coordinate(text, (int)output_report.pos[4].p_int, my_frac, my_negative);
-    ST7735_WriteString_GFX(65, 64, text, &dosis_bold8pt7b, BLACK, WHITE);
+    if (mc_y_int != last_mc_y_int || my_frac != last_mc_y_frac) {
+        sprintf(text, "%6d.%04d", my_negative ? -(int)output_report.pos[4].p_int : (int)output_report.pos[4].p_int, my_frac);
+        ST7735_WriteString_GFX(65, 64, text, &dosis_bold8pt7b, BLACK, WHITE);
+        last_mc_y_int = mc_y_int;
+        last_mc_y_frac = my_frac;
+    }
 
     // MC Z
     uint16_t mz_frac = output_report.pos[5].p_frac;
     uint8_t mz_negative = (mz_frac & 0x8000) ? 1 : 0;
     mz_frac &= 0x7FFF;
+    int32_t mc_z_int = mz_negative ? -(int32_t)output_report.pos[5].p_int : (int32_t)output_report.pos[5].p_int;
 
-    format_coordinate(text, (int)output_report.pos[5].p_int, mz_frac, mz_negative);
-    ST7735_WriteString_GFX(65, 79, text, &dosis_bold8pt7b, BLACK, WHITE);
+    if (mc_z_int != last_mc_z_int || mz_frac != last_mc_z_frac) {
+        sprintf(text, "%6d.%04d", mz_negative ? -(int)output_report.pos[5].p_int : (int)output_report.pos[5].p_int, mz_frac);
+        ST7735_WriteString_GFX(65, 79, text, &dosis_bold8pt7b, BLACK, WHITE);
+        last_mc_z_int = mc_z_int;
+        last_mc_z_frac = mz_frac;
+    }
 
-    /* Status-Daten anzeigen */
+    // Feedrate/Spindle - nur einmal pro Sekunde oder bei Änderung
+    static uint16_t last_feedrate = 0xFFFF, last_feedrate_ovr = 0xFFFF;
+    static uint32_t last_feed_update = 0;
+    uint32_t now = HAL_GetTick();
 
-    /* Feedrate */
-    sprintf(text, "%d", output_report.feedrate);
-    ST7735_WriteString(90, 115, text, Font_7x10, WHITE, BLUE);
+    if (output_report.feedrate != last_feedrate ||
+        output_report.feedrate_ovr != last_feedrate_ovr ||
+        (now - last_feed_update > 1000)) {
 
-    /* Feedrate Override */
-    sprintf(text, "%d%%", output_report.feedrate_ovr);
-    ST7735_WriteString(125, 115, text, Font_7x10, WHITE, BLUE);
+        sprintf(text, "%d", output_report.feedrate);
+        ST7735_WriteString(90, 115, text, Font_7x10, WHITE, BLUE);
 
-    /* Spindle Speed */
-    sprintf(text, "%d", output_report.sspeed);
-    ST7735_WriteString(90, 98, text, Font_7x10, WHITE, BLUE);
+        sprintf(text, "%d", output_report.feedrate_ovr);
+        ST7735_WriteString(130, 115, text, Font_7x10, WHITE, BLUE);
 
-    /* Spindle Override */
-    sprintf(text, "%d%%", output_report.sspeed_ovr);
-    ST7735_WriteString(125, 98, text, Font_7x10, WHITE, BLUE);
+        last_feedrate = output_report.feedrate;
+        last_feedrate_ovr = output_report.feedrate_ovr;
+        last_feed_update = now;
+    }
 }
 
 void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)

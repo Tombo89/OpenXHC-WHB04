@@ -17,5 +17,6 @@ void xhc_main_loop_encoder_only(void);
 
 /* Debug-Funktionen */
 void xhc_debug_callback(void);
+void run_display_performance_tests(void);
 
 #endif /* XHC_MAIN_H */

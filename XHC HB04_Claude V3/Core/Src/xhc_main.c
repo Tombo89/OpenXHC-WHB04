@@ -10,6 +10,7 @@
 #include "button_matrix.h"
 #include "rotary_switch.h"
 #include "xhc_display_ui.h"
+#include "GFX_FUNCTIONS.h"
 
 /* Externe Variablen */
 extern USBD_HandleTypeDef hUsbDeviceFS;
@@ -105,7 +106,6 @@ void xhc_main_loop(void)
                 if (new_btn1 != current_btn1 || new_btn2 != current_btn2) {
                     current_btn1 = new_btn1;
                     current_btn2 = new_btn2;
-                    printf("Buttons: %02X %02X\r\n", current_btn1, current_btn2);
                 }
                 last_button_scan = current_time;
             }
@@ -118,11 +118,8 @@ void xhc_main_loop(void)
                 uint8_t new_wheel_mode = rotary_switch_read();
 
                 if (new_wheel_mode != current_wheel_mode) {
-                    printf("Rotary change: %02X -> %02X\r\n", current_wheel_mode, new_wheel_mode);
-
                     // Accumulator zurücksetzen
                     if (accumulator != 0) {
-                        printf("Reset accumulator: %ld (mode change)\r\n", accumulator);
                         accumulator = 0;
                     }
 
@@ -147,8 +144,6 @@ void xhc_main_loop(void)
                     int16_t speed = (abs_acc >= 8) ? 10 : (abs_acc >= 5) ? 6 :
                                    (abs_acc >= 3) ? 3 : (abs_acc >= 2) ? 2 : 1;
                     wheel_value = (accumulator < 0) ? -speed : speed;
-
-                    printf("Mode %02X: acc=%ld, speed=%d\r\n", current_wheel_mode, accumulator, wheel_value);
                     accumulator = 0;
                 }
 
@@ -198,7 +193,6 @@ void xhc_main_loop_encoder_only(void)
 
             int16_t result = (accumulator < 0) ? -speed : speed;
 
-            printf("Accumulation: acc=%ld, speed=%d\r\n", accumulator, result);
 
             int8_t wheel_value = (result > 127) ? 127 :
                                 (result < -127) ? -127 :
@@ -211,34 +205,202 @@ void xhc_main_loop_encoder_only(void)
     }
 }
 
-/**
- * @brief Debug-Funktion: Zeigt aktuellen Zustand
- */
-void xhc_debug_current_state(void)
-{
-    static uint32_t last_debug = 0;
-    uint32_t current_time = HAL_GetTick();
 
-    if (current_time - last_debug >= 1000) {  // Alle 1 Sekunde
-        printf("XHC State: BTN1=0x%02X BTN2=0x%02X MODE=0x%02X\r\n",
-               current_btn1, current_btn2, current_wheel_mode);
-        last_debug = current_time;
+
+//************************** TEST FUNKTIONEN DISPLAY *****************************
+
+/**
+ * @brief Display Bottleneck Test - Direkt auf Display ausgeben
+ *
+ * Messung wo die Zeit verloren geht, Ergebnis auf LCD anzeigen
+ */
+
+void measure_display_bottlenecks_on_screen(void)
+{
+    char test_text[] = "  123.4567";
+    char result_line[30];
+    uint32_t t1, t2, t3, t4, t5;
+
+    // Display löschen
+    fillScreen(WHITE);
+
+    // Titel anzeigen
+    ST7735_WriteString(10, 10, "BOTTLENECK TEST", Font_7x10, BLACK, WHITE);
+
+    t1 = HAL_GetTick();
+
+    // Test 1: Nur format_coordinate
+    char formatted[20];
+    format_coordinate(formatted, 123, 4567, 0);
+
+    t2 = HAL_GetTick();
+
+    // Test 2: FillRectangle (Cache clear)
+    ST7735_FillRectangle(65, 100, 95, 15, BLUE);  // Sichtbarer Test-Bereich
+
+    t3 = HAL_GetTick();
+
+    // Test 3: Normale Font
+    ST7735_WriteString(65, 100, formatted, Font_7x10, WHITE, BLUE);
+
+    t4 = HAL_GetTick();
+
+    // Test 4: GFX Font (an anderer Stelle)
+    ST7735_WriteString_GFX(10, 120, formatted, &dosis_bold8pt7b, BLACK, WHITE);
+
+    t5 = HAL_GetTick();
+
+    // Ergebnisse auf Display ausgeben
+    uint32_t format_time = t2 - t1;
+    uint32_t fillrect_time = t3 - t2;
+    uint32_t normal_font_time = t4 - t3;
+    uint32_t gfx_font_time = t5 - t4;
+    uint32_t total_time = t5 - t1;
+
+    // Zeile für Zeile anzeigen
+    sprintf(result_line, "Format: %lums", format_time);
+    ST7735_WriteString(10, 30, result_line, Font_7x10, BLACK, WHITE);
+
+    sprintf(result_line, "FillRect: %lums", fillrect_time);
+    ST7735_WriteString(10, 45, result_line, Font_7x10, BLACK, WHITE);
+
+    sprintf(result_line, "Normal Font: %lums", normal_font_time);
+    ST7735_WriteString(10, 60, result_line, Font_7x10, BLACK, WHITE);
+
+    sprintf(result_line, "GFX Font: %lums", gfx_font_time);
+    ST7735_WriteString(10, 75, result_line, Font_7x10, BLACK, WHITE);
+
+    sprintf(result_line, "TOTAL: %lums", total_time);
+    ST7735_WriteString(10, 90, result_line, Font_7x10, RED, WHITE);
+
+    // Fazit anzeigen
+    if (gfx_font_time > normal_font_time * 3) {
+        ST7735_WriteString(10, 140, "GFX FONT IS SLOW!", Font_7x10, RED, WHITE);
+    }
+    if (fillrect_time > 10) {
+        ST7735_WriteString(10, 155, "FILLRECT IS SLOW!", Font_7x10, RED, WHITE);
     }
 }
 
-
-/**
- * @brief Debug-Callback für empfangene Daten
- */
-void xhc_debug_callback(void)
+// Vergleichstest: Verschiedene Font-Methoden
+void compare_font_methods(void)
 {
-    /* Beispiel: LED toggeln wenn Daten empfangen */
-    #ifdef DEBUG_LED_GPIO_Port
-    HAL_GPIO_TogglePin(DEBUG_LED_GPIO_Port, DEBUG_LED_Pin);
-    #endif
+    char test_text[] = "X: 123.4567";
+    char result[30];
+    uint32_t start, end;
 
-    /* Debug-Ausgabe (falls verfügbar) */
-    #ifdef XHC_DEBUG_UART
-    // printf implementierung falls UART verfügbar
-    #endif
+    fillScreen(WHITE);
+    ST7735_WriteString(10, 5, "FONT SPEED TEST", Font_7x10, BLACK, WHITE);
+
+    // Test 1: Normale Font (7x10)
+    start = HAL_GetTick();
+    for (int i = 0; i < 10; i++) {  // 10 mal für bessere Messung
+        ST7735_WriteString(10, 20, test_text, Font_7x10, BLACK, WHITE);
+    }
+    end = HAL_GetTick();
+    sprintf(result, "Font_7x10: %lums", end - start);
+    ST7735_WriteString(10, 40, result, Font_7x10, BLACK, WHITE);
+
+    HAL_Delay(1000);  // 1 Sekunde warten
+
+    // Test 2: GFX Font (dosis_bold8pt7b)
+    start = HAL_GetTick();
+    for (int i = 0; i < 10; i++) {  // 10 mal für bessere Messung
+        ST7735_WriteString_GFX(10, 60, test_text, &dosis_bold8pt7b, BLACK, WHITE);
+    }
+    end = HAL_GetTick();
+    sprintf(result, "GFX Font: %lums", end - start);
+    ST7735_WriteString(10, 80, result, Font_7x10, BLACK, WHITE);
+
+    HAL_Delay(1000);  // 1 Sekunde warten
+
+    // Test 3: Nur FillRectangle
+    start = HAL_GetTick();
+    for (int i = 0; i < 10; i++) {
+        ST7735_FillRectangle(10, 100, 100, 15, BLUE);
+    }
+    end = HAL_GetTick();
+    sprintf(result, "10x FillRect: %lums", end - start);
+    ST7735_WriteString(10, 120, result, Font_7x10, BLACK, WHITE);
+
+    // Erwartung anzeigen
+    ST7735_WriteString(10, 140, "Expected: GFX >> Normal", Font_7x10, RED, WHITE);
+}
+
+// Koordinaten-Update Speed-Test
+void test_coordinate_update_speed(void)
+{
+    uint32_t start, end;
+    char result[30];
+
+    fillScreen(WHITE);
+    ST7735_WriteString(10, 5, "COORD UPDATE TEST", Font_7x10, BLACK, WHITE);
+
+    // Simuliere Koordinaten-Daten
+    output_report.pos[0].p_int = 123;
+    output_report.pos[0].p_frac = 0x1234;  // Ohne Vorzeichen-Bit
+    output_report.pos[1].p_int = 456;
+    output_report.pos[1].p_frac = 0x5678;
+    output_report.pos[2].p_int = 789;
+    output_report.pos[2].p_frac = 0x9ABC;
+
+    // Test: Komplettes Koordinaten-Update
+    start = HAL_GetTick();
+    xhc_ui_update_coordinates();
+    end = HAL_GetTick();
+
+    sprintf(result, "Full Update: %lums", end - start);
+    ST7735_WriteString(10, 25, result, Font_7x10, BLACK, WHITE);
+
+    HAL_Delay(2000);
+
+    // Test: Nur eine Koordinate mit normaler Font
+    start = HAL_GetTick();
+    char text[20];
+    format_coordinate(text, 123, 4567, 0);
+    ST7735_WriteString(65, 50, text, Font_7x10, BLACK, WHITE);
+    end = HAL_GetTick();
+
+    sprintf(result, "1 Coord Normal: %lums", end - start);
+    ST7735_WriteString(10, 45, result, Font_7x10, BLACK, WHITE);
+
+    HAL_Delay(1000);
+
+    // Test: Eine Koordinate mit GFX Font
+    start = HAL_GetTick();
+    ST7735_WriteString_GFX(65, 70, text, &dosis_bold8pt7b, BLACK, WHITE);
+    end = HAL_GetTick();
+
+    sprintf(result, "1 Coord GFX: %lums", end - start);
+    ST7735_WriteString(10, 65, result, Font_7x10, BLACK, WHITE);
+
+    // Fazit
+    ST7735_WriteString(10, 90, "GFX Font = Problem?", Font_7x10, RED, WHITE);
+}
+
+// Haupt-Test-Funktion für main.c
+void run_display_performance_tests(void)
+{
+    // Display und Hardware initialisieren
+    ST7735_Init(3);
+    xhc_ui_init();
+
+    HAL_Delay(2000);  // 2 Sekunden warten
+
+    // Test 1: Bottleneck-Analyse
+    measure_display_bottlenecks_on_screen();
+    HAL_Delay(5000);  // 5 Sekunden anzeigen
+
+    // Test 2: Font-Vergleich
+    compare_font_methods();
+    HAL_Delay(5000);  // 5 Sekunden anzeigen
+
+    // Test 3: Koordinaten-Update-Speed
+    test_coordinate_update_speed();
+    HAL_Delay(5000);  // 5 Sekunden anzeigen
+
+    // Ende
+    fillScreen(GREEN);
+    ST7735_WriteString(10, 50, "TESTS COMPLETE", Font_7x10, BLACK, GREEN);
+    ST7735_WriteString(10, 70, "Check results above", Font_7x10, BLACK, GREEN);
 }

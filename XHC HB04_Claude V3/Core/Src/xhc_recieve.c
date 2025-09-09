@@ -79,20 +79,18 @@ void xhc_recv(uint8_t *data)
  */
 void xhc_process_received_data(void)
 {
+    static uint32_t last_display_update = 0;
+    uint32_t current_time = HAL_GetTick();
 
-	xhc_ui_update_coordinates();
-	xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
-    char text[32];
-
-
-    /* Debug-Callback aufrufen */
-    #ifdef XHC_DEBUG_ENABLED
-    extern void xhc_debug_callback(void);
-    xhc_debug_callback();
-    #endif
-
-    /* Beispiel: Setze Flag für LCD-Rendering */
-    // g_render_lcd = 1;
+    // NUR alle 100ms Display updaten UND nur geänderte Werte
+    if (current_time - last_display_update >= 100) {
+        xhc_ui_update_coordinates();  // Nur geänderte Werte
+        // Status-Bar seltener updaten (ändert sich weniger oft)
+        if ((current_time - last_display_update) >= 500) {
+            xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
+        }
+        last_display_update = current_time;
+    }
 }
 
 /**
