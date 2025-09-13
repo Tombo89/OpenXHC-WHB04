@@ -79,19 +79,61 @@ void xhc_recv(uint8_t *data)
  */
 void xhc_process_received_data(void)
 {
+    static uint32_t last_position_values[6] = {0};
     static uint32_t last_display_update = 0;
+    static uint32_t update_count = 0;
+    static uint8_t settling_mode = 1;  // Anfangs mehr Updates
+
     uint32_t current_time = HAL_GetTick();
 
-    // NUR alle 100ms Display updaten UND nur geänderte Werte
-    if (current_time - last_display_update >= 100) {
-        xhc_ui_update_coordinates();  // Nur geänderte Werte
-        // Status-Bar seltener updaten (ändert sich weniger oft)
-        if ((current_time - last_display_update) >= 500) {
+    uint8_t need_update = 0;
+    uint8_t any_change = 0;
+
+    // Prüfe jede Achse einzeln
+    for (int i = 0; i < 6; i++) {
+        uint32_t current_value = (output_report.pos[i].p_int << 16) |
+                                (output_report.pos[i].p_frac & 0x7FFF);
+
+        uint32_t diff = (current_value > last_position_values[i]) ?
+                       (current_value - last_position_values[i]) :
+                       (last_position_values[i] - current_value);
+
+        // *** ADAPTIVE SCHWELLE ***
+        uint32_t threshold = settling_mode ? 1 : 10;  // Anfangs sehr empfindlich
+
+        if (diff >= threshold) {
+            any_change = 1;
+            last_position_values[i] = current_value;
+        }
+    }
+
+    // Update-Entscheidung
+    if (any_change) {
+        need_update = 1;
+        update_count++;
+
+        // Nach 20 Updates weniger empfindlich werden
+        if (update_count >= 20) {
+            settling_mode = 0;
+
+        }
+    }
+    // Fallback: Alle 100ms
+    else if ((current_time - last_display_update) >= 100) {
+        need_update = 1;
+    }
+
+    if (need_update) {
+        xhc_ui_update_coordinates();
+        last_display_update = current_time;
+    }
+
+    if ((current_time - last_display_update) >= 500) {
             xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
         }
         last_display_update = current_time;
     }
-}
+
 
 /**
  * @brief Hilfsfunktion um die empfangenen Positionsdaten zu extrahieren
