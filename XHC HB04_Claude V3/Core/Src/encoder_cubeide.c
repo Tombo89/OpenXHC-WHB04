@@ -313,9 +313,20 @@ void encoder_reset_buffers(void)
         impulse_buffer = 0;
     }
     encoder_data_ready = 0;
+    // 1. Timer Hardware-Register zurücksetzen
+        uint16_t old_count = TIM2->CNT;
+        TIM2->CNT = 0;  // Hardware-Counter auf 0
+        if (old_count != 0) {
+            printf("Reset TIM2->CNT: %d\r\n", old_count);
+        }
 
-    // *** NEU: Timer-Register auf 0 setzen ***
-    TIM2->CNT = 0;  // Das resettet auch automatisch last_count beim nächsten Poll
+        // 2. Encoder-interne Variablen zurücksetzen
+        extern uint16_t enc_prev_cnt;  // Aus encoder_cubeide.c
+        extern int32_t enc_rem;        // Aus encoder_cubeide.c
+        enc_prev_cnt = 0;
+        enc_rem = 0;
 
+        // 3. Timing zurücksetzen
+        last_encoder_time = HAL_GetTick();
     __enable_irq();
 }

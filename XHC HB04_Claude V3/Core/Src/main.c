@@ -108,7 +108,7 @@ int main(void)
   MX_USB_DEVICE_Init();
   MX_TIM2_Init();
   /* USER CODE BEGIN 2 */
-  ST7735_Init(3);
+  ST7735_Init(1);
 
 
   xhc_custom_hid_init();

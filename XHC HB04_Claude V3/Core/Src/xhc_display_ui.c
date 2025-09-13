@@ -217,8 +217,8 @@ void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
         case ROTARY_A: pos_text = "A"; break;
     }
 
-    sprintf(text, "%s    ", pos_text);
-    ST7735_WriteString(35, 98, text, Font_7x10, WHITE, BLUE);
+    sprintf(text, "%s  ", pos_text);
+    ST7735_WriteString(30, 98, text, Font_7x10, WHITE, BLUE);
 
     /* Step Multiplier mit besserer Formatierung */
     uint8_t low_nibble = step_mul & 0x0F;
@@ -236,6 +236,6 @@ void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
         case 0x0A: step_text = "1.000"; break;
     }
 
-    sprintf(text, "%s  ", step_text);
+    sprintf(text, "%s", step_text);
     ST7735_WriteString(30, 115, text, Font_7x10, WHITE, BLUE);
 }

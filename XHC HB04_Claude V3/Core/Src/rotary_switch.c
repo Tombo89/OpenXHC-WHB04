@@ -4,18 +4,18 @@
 #include <stdio.h>
 
 /* Hardware-Definitionen */
-#define ROT_POS1_GPIO_Port  GPIOA
-#define ROT_POS1_Pin        GPIO_PIN_8   // X
-#define ROT_POS2_GPIO_Port  GPIOA
-#define ROT_POS2_Pin        GPIO_PIN_9   // Y
-#define ROT_POS3_GPIO_Port  GPIOA
-#define ROT_POS3_Pin        GPIO_PIN_10  // Z
-#define ROT_POS4_GPIO_Port  GPIOB
-#define ROT_POS4_Pin        GPIO_PIN_10  // Spindle
-#define ROT_POS5_GPIO_Port  GPIOB
-#define ROT_POS5_Pin        GPIO_PIN_11  // Feed
-#define ROT_POS6_GPIO_Port  GPIOB
-#define ROT_POS6_Pin        GPIO_PIN_1   // A-Axis
+#define ROT_POS1_GPIO_Port  GPIOB
+#define ROT_POS1_Pin        GPIO_PIN_1   // A
+#define ROT_POS2_GPIO_Port  GPIOB
+#define ROT_POS2_Pin        GPIO_PIN_11   // F
+#define ROT_POS3_GPIO_Port  GPIOB
+#define ROT_POS3_Pin        GPIO_PIN_10  // S
+#define ROT_POS4_GPIO_Port  GPIOA
+#define ROT_POS4_Pin        GPIO_PIN_10  // Z
+#define ROT_POS5_GPIO_Port  GPIOA
+#define ROT_POS5_Pin        GPIO_PIN_9  // Y
+#define ROT_POS6_GPIO_Port  GPIOA
+#define ROT_POS6_Pin        GPIO_PIN_8   // X
 
 void rotary_switch_init(void)
 {
@@ -33,17 +33,17 @@ uint8_t rotary_switch_read(void)
     uint8_t current_hw_pos = ROTARY_OFF;
 
     if (!HAL_GPIO_ReadPin(ROT_POS1_GPIO_Port, ROT_POS1_Pin))
-        current_hw_pos = ROTARY_X;
-    else if (!HAL_GPIO_ReadPin(ROT_POS2_GPIO_Port, ROT_POS2_Pin))
-        current_hw_pos = ROTARY_Y;
-    else if (!HAL_GPIO_ReadPin(ROT_POS3_GPIO_Port, ROT_POS3_Pin))
-        current_hw_pos = ROTARY_Z;
-    else if (!HAL_GPIO_ReadPin(ROT_POS4_GPIO_Port, ROT_POS4_Pin))
-        current_hw_pos = ROTARY_SPINDLE;
-    else if (!HAL_GPIO_ReadPin(ROT_POS5_GPIO_Port, ROT_POS5_Pin))
-        current_hw_pos = ROTARY_FEED;
-    else if (!HAL_GPIO_ReadPin(ROT_POS6_GPIO_Port, ROT_POS6_Pin))
         current_hw_pos = ROTARY_A;
+    else if (!HAL_GPIO_ReadPin(ROT_POS2_GPIO_Port, ROT_POS2_Pin))
+        current_hw_pos = ROTARY_FEED;
+    else if (!HAL_GPIO_ReadPin(ROT_POS3_GPIO_Port, ROT_POS3_Pin))
+        current_hw_pos = ROTARY_SPINDLE;
+    else if (!HAL_GPIO_ReadPin(ROT_POS4_GPIO_Port, ROT_POS4_Pin))
+        current_hw_pos = ROTARY_Z;
+    else if (!HAL_GPIO_ReadPin(ROT_POS5_GPIO_Port, ROT_POS5_Pin))
+        current_hw_pos = ROTARY_Y;
+    else if (!HAL_GPIO_ReadPin(ROT_POS6_GPIO_Port, ROT_POS6_Pin))
+        current_hw_pos = ROTARY_X;
     // else bleibt ROTARY_OFF
 
     /* Entprellung und OFF-Verzögerung */

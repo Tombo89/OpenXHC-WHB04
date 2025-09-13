@@ -7,6 +7,11 @@
 
 #include <stdint.h>
 
+extern uint16_t enc_prev_cnt;
+extern int32_t enc_rem;
+extern volatile int16_t encoder_1ms_buffer;
+extern volatile int32_t impulse_buffer;
+
 /* Funktionsprototypen */
 void encoder_init(void);
 int16_t encoder_read(void);

@@ -118,22 +118,43 @@ void xhc_main_loop(void)
                 uint8_t new_wheel_mode = rotary_switch_read();
 
                 if (new_wheel_mode != current_wheel_mode) {
-                    // Accumulator zurücksetzen
+
+
+                    // *** VERSTÄRKTES RESET ***
+
+                    // 1. Accumulator mehrfach leeren
                     if (accumulator != 0) {
+
                         accumulator = 0;
                     }
 
-                    // *** NEU: Encoder-Buffer über Funktion zurücksetzen ***
+                    // 2. Encoder-Buffer komplett leeren
                     encoder_reset_buffers();
+
+                    // 3. *** NEU: USB-Send Timer zurücksetzen ***
+                    last_send = current_time;  // Verhindert sofortige Sendung
+
+                    // 4. *** NEU: Zusätzliche Pause für Hardware-Stabilisierung ***
+                    HAL_Delay(10);  // 10ms Pause für Hardware-Reset
+
+                    // 5. *** NEU: Nochmaliger Buffer-Check ***
+                    int16_t check_detents = encoder_read_1ms();
+                    if (check_detents != 0) {
+
+                        // Nochmal leeren
+                        encoder_reset_buffers();
+                    }
 
                     previous_wheel_mode = current_wheel_mode;
                     current_wheel_mode = new_wheel_mode;
                 }
                 last_rotary_scan = current_time;
             }
+            xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
             state = 3;
             break;
         }
+
 
         case 3: {  // USB SEND (mit Timer)
             if (current_time - last_send >= 50) {

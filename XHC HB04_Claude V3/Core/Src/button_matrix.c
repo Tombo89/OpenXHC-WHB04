@@ -52,13 +52,13 @@
 static const uint8_t kbd_key_codes[] =
 {
     /* Zeile 0: reset, stop, m1, m2 */
-    BTN_SS,      BTN_Zero,    BTN_Macro1,  BTN_Stop,
+    BTN_SS,      BTN_Stop,    BTN_Rewind,  BTN_Reset,
     /* Zeile 1: GoZero, s/p, rewind, Probe-Z */
-    BTN_Spindle, BTN_SafeZ,   BTN_ProbeZ,  BTN_Goto0,
+	BTN_Goto0, BTN_Zero,   BTN_Half,  BTN_SafeZ,
     /* Zeile 2: Spind, =1/2, =0, Safe-Z */
-    BTN_Macro7,  BTN_Macro6,  BTN_Macro3,  BTN_GotoHome,
+	BTN_GotoHome,  BTN_Macro1,  BTN_Macro2,  BTN_ProbeZ,
     /* Zeile 3: Home, M6, Step+, M3 */
-    BTN_Macro2,  BTN_Rewind,  BTN_Half,    BTN_Step,
+	BTN_Macro3,  BTN_Macro6,  BTN_Spindle,    BTN_Step,
 };
 
 /* Globale Variablen für Entprellung */
