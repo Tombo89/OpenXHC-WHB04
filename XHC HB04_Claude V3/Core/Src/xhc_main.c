@@ -20,6 +20,17 @@ static uint8_t current_btn1 = 0;
 static uint8_t current_btn2 = 0;
 static uint8_t current_wheel_mode = 0x11;
 
+// 1. NEUE GLOBALE VARIABLEN (nach den bestehenden einfügen)
+// Optimierte Zustandsverfolgung für Event-basiertes Senden
+static struct {
+    uint8_t btn1_last;
+    uint8_t btn2_last;
+    uint8_t wheel_mode_last;
+    uint8_t button_changed : 1;
+    uint8_t wheel_mode_changed : 1;
+    uint8_t force_keepalive : 1;
+} state_tracker = {0};
+
 // State Machine für non-blocking Updates
 typedef enum {
     MAIN_STATE_ENCODER,
@@ -81,107 +92,162 @@ uint8_t xhc_send_input_report(uint8_t btn1, uint8_t btn2, uint8_t wheel_mode, in
  */
 void xhc_main_loop(void)
 {
-    static int32_t accumulator = 0;
-    static uint32_t last_send = 0;
-    static uint8_t current_btn1 = 0, current_btn2 = 0, current_wheel_mode = 0x11;
-    static uint8_t previous_wheel_mode = 0x11;  // *** HINZUGEFÜGT: Für Mode-Change-Detection ***
-    static uint32_t last_button_scan = 0, last_rotary_scan = 0;
-    static uint8_t state = 0;
+	   static int32_t accumulator = 0;
+	    static uint32_t last_send = 0;
+	    static uint32_t last_keepalive = 0;
+	    static uint32_t last_button_scan = 0, last_rotary_scan = 0;
+	    static uint32_t last_wheel_activity = 0;
+	    static uint8_t state = 0;
 
-    uint32_t current_time = HAL_GetTick();
+	    uint32_t current_time = HAL_GetTick();
 
-    switch (state) {
-        case 0: {  // ENCODER (jeder Durchlauf)
-            int16_t detents = encoder_read_1ms();
-            accumulator += detents;
-            state = 1;
-            break;
-        }
+	    switch (state) {
+	        case 0: {  // ENCODER (jeder Durchlauf - bleibt wie Original)
+	            int16_t detents = encoder_read_1ms();
+	            if (detents != 0) {
+	                accumulator += detents;
+	                last_wheel_activity = current_time;
+	            }
+	            state = 1;
+	            break;
+	        }
 
-        case 1: {  // BUTTONS (mit Timer)
-            if (current_time - last_button_scan >= 25) {
-                uint8_t new_btn1, new_btn2;
-                button_matrix_scan(&new_btn1, &new_btn2);
+	        case 1: {  // BUTTONS (entspannter: alle 20ms statt 25ms)
+	            if (current_time - last_button_scan >= 20) {
+	                uint8_t new_btn1, new_btn2;
+	                button_matrix_scan(&new_btn1, &new_btn2);
 
-                if (new_btn1 != current_btn1 || new_btn2 != current_btn2) {
-                    current_btn1 = new_btn1;
-                    current_btn2 = new_btn2;
-                }
-                last_button_scan = current_time;
-            }
-            state = 2;
-            break;
-        }
+	                // Prüfe auf Änderungen
+	                if (new_btn1 != state_tracker.btn1_last || new_btn2 != state_tracker.btn2_last) {
+	                    current_btn1 = new_btn1;
+	                    current_btn2 = new_btn2;
+	                    state_tracker.btn1_last = new_btn1;
+	                    state_tracker.btn2_last = new_btn2;
+	                    state_tracker.button_changed = 1;
+	                }
+	                last_button_scan = current_time;
+	            }
+	            state = 2;
+	            break;
+	        }
 
-        case 2: { // ROTARY (mit Timer)
-            if (current_time - last_rotary_scan >= 50) {
-                uint8_t new_wheel_mode = rotary_switch_read();
+	        case 2: { // ROTARY
+	            if (current_time - last_rotary_scan >= 50) {
+	                uint8_t new_wheel_mode = rotary_switch_read();
 
-                if (new_wheel_mode != current_wheel_mode) {
+	                if (new_wheel_mode != state_tracker.wheel_mode_last) {
+	                    printf("Rotary change: %02X -> %02X - AGGRESSIVE RESET!\r\n",
+	                           state_tracker.wheel_mode_last, new_wheel_mode);
 
+	                    // *** AGGRESSIVES BUFFER-CLEARING ***
 
-                    // *** VERSTÄRKTES RESET ***
+	                    // 1. Lokalen Accumulator zurücksetzen
+	                    if (accumulator != 0) {
+	                        printf("Reset accumulator: %ld\r\n", accumulator);
+	                        accumulator = 0;
+	                    }
 
-                    // 1. Accumulator mehrfach leeren
-                    if (accumulator != 0) {
+	                    // 2. Encoder-Buffer leeren (mehrfach!)
+	                    encoder_reset_buffers();
 
-                        accumulator = 0;
-                    }
+	                    // 3. *** NEU: Mehrfach leeren bis wirklich leer ***
+	                    for (int i = 0; i < 5; i++) {
+	                        int16_t check = encoder_read_1ms();
+	                        if (check != 0) {
+	                            printf("Buffer not empty, retry %d: %d\r\n", i, check);
+	                            encoder_reset_buffers();
+	                            HAL_Delay(2);  // Kurze Pause
+	                        } else {
+	                            break;  // Buffer ist leer
+	                        }
+	                    }
 
-                    // 2. Encoder-Buffer komplett leeren
-                    encoder_reset_buffers();
+	                    // 4. *** NEU: Last wheel activity zurücksetzen ***
+	                    last_wheel_activity = 0;  // Verhindert alte Activity-Detection
 
-                    // 3. *** NEU: USB-Send Timer zurücksetzen ***
-                    last_send = current_time;  // Verhindert sofortige Sendung
+	                    // 5. *** NEU: USB-Send-Timer zurücksetzen um sofortige Sendung zu verhindern ***
+	                    last_send = current_time;
 
-                    // 4. *** NEU: Zusätzliche Pause für Hardware-Stabilisierung ***
-                    HAL_Delay(10);  // 10ms Pause für Hardware-Reset
+	                    // 6. Hardware-Stabilisierung
+	                    HAL_Delay(10);
 
-                    // 5. *** NEU: Nochmaliger Buffer-Check ***
-                    int16_t check_detents = encoder_read_1ms();
-                    if (check_detents != 0) {
+	                    // 7. *** FINALER CHECK: Nochmal prüfen ob Buffer wirklich leer ***
+	                    int16_t final_check = encoder_read_1ms();
+	                    if (final_check != 0) {
+	                        printf("WARNING: Buffer still not empty: %d\r\n", final_check);
+	                        encoder_reset_buffers();  // Nochmal versuchen
+	                    }
 
-                        // Nochmal leeren
-                        encoder_reset_buffers();
-                    }
+	                    // Mode wechseln
+	                    current_wheel_mode = new_wheel_mode;
+	                    state_tracker.wheel_mode_last = new_wheel_mode;
+	                    state_tracker.wheel_mode_changed = 1;
 
-                    previous_wheel_mode = current_wheel_mode;
-                    current_wheel_mode = new_wheel_mode;
-                }
-                last_rotary_scan = current_time;
-            }
-            xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
-            state = 3;
-            break;
-        }
+	                    printf("Rotary switch complete. Buffer should be clean.\r\n");
+	                }
+	                last_rotary_scan = current_time;
+	            }
 
+	            // Display-Update nur bei Änderungen
+	            if (state_tracker.wheel_mode_changed) {
+	                xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
+	                state_tracker.wheel_mode_changed = 0;
+	            }
+	            state = 3;
+	            break;
+	        }
 
-        case 3: {  // USB SEND (mit Timer)
-            if (current_time - last_send >= 50) {
-                int8_t wheel_value = 0;
+	        case 3: {  // USB SEND - HIER IST DIE GROSSE ÄNDERUNG!
+	            uint8_t need_send = 0;
+	            int8_t wheel_value = 0;
 
-                if (accumulator != 0) {
-                    int16_t abs_acc = (accumulator < 0) ? -accumulator : accumulator;
-                    int16_t speed = (abs_acc >= 8) ? 10 : (abs_acc >= 5) ? 6 :
-                                   (abs_acc >= 3) ? 3 : (abs_acc >= 2) ? 2 : 1;
-                    wheel_value = (accumulator < 0) ? -speed : speed;
-                    accumulator = 0;
-                }
+	            // Wheel-Wert berechnen (wie Original)
+	            if (accumulator != 0) {
+	                int16_t abs_acc = (accumulator < 0) ? -accumulator : accumulator;
+	                int16_t speed = (abs_acc >= 8) ? 10 : (abs_acc >= 5) ? 6 :
+	                               (abs_acc >= 3) ? 3 : (abs_acc >= 2) ? 2 : 1;
+	                wheel_value = (accumulator < 0) ? -speed : speed;
+	                accumulator = 0;
+	                need_send = 1; // Bei Wheel-Bewegung sofort senden
+	            }
 
-                in_report.btn_1 = current_btn1;
-                in_report.btn_2 = current_btn2;
-                in_report.wheel_mode = current_wheel_mode;
-                in_report.wheel = wheel_value;
-                in_report.xor_day = xhc_get_day() ^ current_btn1;
+	            // Bei Änderungen sofort senden
+	            if (state_tracker.button_changed || state_tracker.wheel_mode_changed) {
+	                need_send = 1;
+	            }
 
-                USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS, (uint8_t*)&in_report, sizeof(in_report));
-                last_send = current_time;
-            }
-            state = 0;
-            break;
-        }
-    }
-}
+	            // Keep-Alive: Nur alle 500ms statt 50ms! (90% Reduktion!)
+	            if ((current_time - last_keepalive) >= 500) {
+	                state_tracker.force_keepalive = 1;
+	                need_send = 1;
+	                last_keepalive = current_time;
+	            }
+
+	            // Senden nur bei Bedarf UND Mindestabstand
+	            if (need_send && (current_time - last_send >= 20)) {  // 20ms Mindestabstand
+	                in_report.btn_1 = current_btn1;
+	                in_report.btn_2 = current_btn2;
+	                in_report.wheel_mode = current_wheel_mode;
+	                in_report.wheel = wheel_value;
+	                in_report.xor_day = xhc_get_day() ^ current_btn1;
+
+	                uint8_t result = USBD_CUSTOM_HID_SendReport(&hUsbDeviceFS,
+	                                                           (uint8_t*)&in_report,
+	                                                           sizeof(in_report));
+	                if (result == USBD_OK) {
+	                    last_send = current_time;
+
+	                    // Flags zurücksetzen
+	                    state_tracker.button_changed = 0;
+	                    state_tracker.wheel_mode_changed = 0;
+	                    state_tracker.force_keepalive = 0;
+	                }
+	            }
+	            state = 0;
+	            break;
+	        }
+	    }
+	}
 
 /**
  * @brief Komplett minimale Version - nur Encoder
