@@ -48,7 +48,7 @@
 #define BTN_Step        0x0D    // Step+
 #define BTN_MPG         0x0E
 
-/* 4x4 Key-Matrix Layout (wie im Original - vertikal gespiegelt wegen PCB) */
+/* 4x4 Key-Matrix Layout */
 static const uint8_t kbd_key_codes[] =
 {
     /* Zeile 0: reset, stop, m1, m2 */
