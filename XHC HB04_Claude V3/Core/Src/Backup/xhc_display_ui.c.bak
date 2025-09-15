@@ -110,7 +110,7 @@ void xhc_ui_update_coordinates(void)
 
     if (wc_x_int != last_wc_x_int || x_frac != last_wc_x_frac) {
         format_coordinate(text, (int)output_report.pos[0].p_int, x_frac, x_negative);
-        ST7735_WriteString_GFX(65, 2, text, &dosis_bold8pt7b, BLACK, WHITE);
+        ST7735_WriteString(40, 2, text, Font_11x16, BLACK, WHITE);
         last_wc_x_int = wc_x_int;
         last_wc_x_frac = x_frac;
     }
