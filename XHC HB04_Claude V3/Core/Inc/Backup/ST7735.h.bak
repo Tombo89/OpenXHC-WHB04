@@ -103,6 +103,11 @@ void ST7735_FillScreen(uint16_t color);
 void ST7735_DrawImage(uint16_t x, uint16_t y, uint16_t w, uint16_t h, const uint16_t* data);
 void ST7735_InvertColors(bool invert);
 
-
+// GFX Font Funktionen
+void ST7735_WriteChar_GFX(uint16_t x, uint16_t y, char c, const GFXfont *gfxFont,
+                          uint16_t color, uint16_t bgcolor);
+void ST7735_WriteString_GFX(uint16_t x, uint16_t y, const char* str,
+                           const GFXfont *gfxFont, uint16_t color, uint16_t bgcolor);
+uint16_t ST7735_GetStringWidth_GFX(const char* str, const GFXfont *gfxFont);
 
 #endif // __ST7735_H__

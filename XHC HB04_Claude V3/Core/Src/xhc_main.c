@@ -20,6 +20,18 @@ static uint8_t current_btn1 = 0;
 static uint8_t current_btn2 = 0;
 static uint8_t current_wheel_mode = 0x11;
 
+
+volatile struct {
+    int32_t total_encoder_input;
+    int32_t total_usb_output;
+    int32_t current_accumulator;
+    int16_t last_detents;
+    int8_t last_wheel_value;
+    uint32_t encoder_calls;
+    uint32_t usb_sends;
+    uint32_t click_loss_counter;
+} debug_vars = {0};
+
 // 1. NEUE GLOBALE VARIABLEN (nach den bestehenden einfügen)
 // Optimierte Zustandsverfolgung für Event-basiertes Senden
 static struct {
@@ -102,15 +114,25 @@ void xhc_main_loop(void)
 	    uint32_t current_time = HAL_GetTick();
 
 	    switch (state) {
-	        case 0: {  // ENCODER (jeder Durchlauf - bleibt wie Original)
-	            int16_t detents = encoder_read_1ms();
-	            if (detents != 0) {
-	                accumulator += detents;
-	                last_wheel_activity = current_time;
+	    case 0: {  // ENCODER - ATOMIC OPERATIONS
+	        int16_t detents = encoder_read_1ms();
+	        if (detents != 0) {
+	            // *** ATOMIC: Disable interrupts während Accumulator-Zugriff ***
+	            __disable_irq();
+	            accumulator += detents;
+	            last_wheel_activity = current_time;
+	            __enable_irq();
+
+	            // Debug: Zeige verlorene Klicks
+	            static int32_t total_detents = 0;
+	            total_detents += detents;
+	            if (abs(detents) > 1) {
+	                printf("Fast encoder: %d (total: %ld)\r\n", detents, total_detents);
 	            }
-	            state = 1;
-	            break;
 	        }
+	        state = 1;
+	        break;
+	    }
 
 	        case 1: {  // BUTTONS (entspannter: alle 20ms statt 25ms)
 	            if (current_time - last_button_scan >= 20) {
@@ -197,34 +219,54 @@ void xhc_main_loop(void)
 	            break;
 	        }
 
-	        case 3: {  // USB SEND - HIER IST DIE GROSSE ÄNDERUNG!
+	        case 3: {  // USB SEND - ATOMIC ACCUMULATOR READ
 	            uint8_t need_send = 0;
 	            int8_t wheel_value = 0;
 
-	            // Wheel-Wert berechnen (wie Original)
-	            if (accumulator != 0) {
-	                int16_t abs_acc = (accumulator < 0) ? -accumulator : accumulator;
-	                int16_t speed = (abs_acc >= 8) ? 10 : (abs_acc >= 5) ? 6 :
-	                               (abs_acc >= 3) ? 3 : (abs_acc >= 2) ? 2 : 1;
-	                wheel_value = (accumulator < 0) ? -speed : speed;
-	                accumulator = 0;
-	                need_send = 1; // Bei Wheel-Bewegung sofort senden
+	            // Adaptive USB-Send-Frequenz basierend auf Encoder-Aktivität
+	            uint32_t usb_interval;
+	            if (abs(accumulator) > 10) {
+	                usb_interval = 10;  // Bei schneller Bewegung: alle 10ms
+	            } else if (abs(accumulator) > 5) {
+	                usb_interval = 15;  // Bei mittlerer Bewegung: alle 15ms
+	            } else {
+	                usb_interval = 20;  // Bei langsamer Bewegung: alle 20ms
 	            }
 
-	            // Bei Änderungen sofort senden
+	            // *** ATOMIC ACCUMULATOR READ ***
+	            int32_t current_accumulator;
+	            __disable_irq();
+	            current_accumulator = accumulator;
+	            accumulator = 0;
+	            __enable_irq();
+
+	            if (current_accumulator != 0) {
+	                // Speed-Mapping (verbessert für hohe Geschwindigkeiten)
+	                int16_t abs_acc = (current_accumulator < 0) ? -current_accumulator : current_accumulator;
+	                int16_t speed = (abs_acc > 20) ? 50 : (abs_acc > 15) ? 30 :
+	                               (abs_acc > 10) ? 20 : (abs_acc > 8) ? 10 :
+	                               (abs_acc > 5) ? 6 : (abs_acc > 3) ? 3 :
+	                               (abs_acc > 2) ? 2 : 1;
+
+	                wheel_value = (current_accumulator < 0) ? -speed : speed;
+	                if (wheel_value > 127) wheel_value = 127;
+	                if (wheel_value < -127) wheel_value = -127;
+
+	                need_send = 1;
+	            }
+
+	            // Rest der USB-Send Logik bleibt gleich...
 	            if (state_tracker.button_changed || state_tracker.wheel_mode_changed) {
 	                need_send = 1;
 	            }
 
-	            // Keep-Alive: Nur alle 500ms statt 50ms! (90% Reduktion!)
 	            if ((current_time - last_keepalive) >= 500) {
 	                state_tracker.force_keepalive = 1;
 	                need_send = 1;
 	                last_keepalive = current_time;
 	            }
 
-	            // Senden nur bei Bedarf UND Mindestabstand
-	            if (need_send && (current_time - last_send >= 20)) {  // 20ms Mindestabstand
+	            if (need_send && (current_time - last_send >= 20)) {
 	                in_report.btn_1 = current_btn1;
 	                in_report.btn_2 = current_btn2;
 	                in_report.wheel_mode = current_wheel_mode;
@@ -237,7 +279,6 @@ void xhc_main_loop(void)
 	                if (result == USBD_OK) {
 	                    last_send = current_time;
 
-	                    // Flags zurücksetzen
 	                    state_tracker.button_changed = 0;
 	                    state_tracker.wheel_mode_changed = 0;
 	                    state_tracker.force_keepalive = 0;
