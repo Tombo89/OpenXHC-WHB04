@@ -7,7 +7,9 @@
 #include <stdio.h>
 
 
+
 static uint8_t ui_initialized = 0;
+
 
 // kleine Helfer
 static inline void HLine(int x, int y, int w, uint16_t c){
@@ -29,24 +31,24 @@ void xhc_ui_init(void)
 
 
     /* WC-Bereich statische Labels - SCHWARZ auf WEISS */
-    ST7735_WriteString(2, 2, "WC", Font_9, ST7735_BLACK, ST7735_WHITE);
-    ST7735_WriteString(45, 2, "X:", Font_9, ST7735_BLACK, ST7735_WHITE);
-    ST7735_WriteString(45, 17, "Y:", Font_9, ST7735_BLACK, ST7735_WHITE);
-    ST7735_WriteString(45, 32, "Z:", Font_9, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(2, 2, "WC", Font_9x12, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(40, 2, "X:", Font_9x12, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(40, 17, "Y:", Font_9x12, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(40, 32, "Z:", Font_9x12, ST7735_BLACK, ST7735_WHITE);
 
 
 
-    //ST7735_WriteString_GFX(65, 2, "no connection", &dosis_bold8pt7b, BLACK, WHITE);
-    //ST7735_WriteString_GFX(65, 17, "no connection", &dosis_bold8pt7b, BLACK, WHITE);
-    //ST7735_WriteString_GFX(65, 32, "no connection", &dosis_bold8pt7b, BLACK, WHITE);
+    ST7735_WriteString(50, 2, " -1.0000", Font_9x12, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(50, 17, "1.0000", Font_9x12, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(50, 32, "-1000.0000", Font_9x12, ST7735_BLACK, ST7735_WHITE);
 
     HLine(2, 2, 2, ST7735_BLACK);
 
     /* MC-Bereich statische Labels - SCHWARZ auf WEISS */
-    ST7735_WriteString(2, 49, "MC", Font_9, ST7735_BLACK, ST7735_WHITE);
-    ST7735_WriteString(45, 49, "X:", Font_9, ST7735_BLACK, ST7735_WHITE);
-    ST7735_WriteString(45, 64, "Y:", Font_9, ST7735_BLACK, ST7735_WHITE);
-    ST7735_WriteString(45, 79, "Z:", Font_9, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(2, 49, "MC", Font_9x12, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(40, 49, "X:", Font_9x12, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(40, 64, "Y:", Font_9x12, ST7735_BLACK, ST7735_WHITE);
+    ST7735_WriteString(40, 79, "Z:", Font_9x12, ST7735_BLACK, ST7735_WHITE);
 
     //ST7735_WriteString_GFX(65, 49, "no connection", &dosis_bold8pt7b, BLACK, WHITE);
     //ST7735_WriteString_GFX(65, 64, "no connection", &dosis_bold8pt7b, BLACK, WHITE);
@@ -100,6 +102,8 @@ void format_coordinate(char* text, int value, uint16_t frac, uint8_t negative)
     sprintf(text, "%12s", temp);
 }
 
+
+
 void xhc_ui_update_coordinates(void)
 {
     char text[20];
@@ -118,7 +122,7 @@ void xhc_ui_update_coordinates(void)
 
     if (wc_x_int != last_wc_x_int || x_frac != last_wc_x_frac) {
         format_coordinate(text, (int)output_report.pos[0].p_int, x_frac, x_negative);
-        ST7735_WriteString(40, 2, text, Font_9, ST7735_BLACK, ST7735_WHITE);
+        ST7735_WriteString(50, 2, text, Font_9x12, ST7735_BLACK, ST7735_WHITE);
         last_wc_x_int = wc_x_int;
         last_wc_x_frac = x_frac;
     }
@@ -131,7 +135,7 @@ void xhc_ui_update_coordinates(void)
 
     if (wc_y_int != last_wc_y_int || y_frac != last_wc_y_frac) {
         format_coordinate(text, (int)output_report.pos[1].p_int, y_frac, y_negative);
-        ST7735_WriteString(65, 17, text, Font_9, ST7735_BLACK, ST7735_WHITE);
+        ST7735_WriteString(50, 17, text, Font_9x12, ST7735_BLACK, ST7735_WHITE);
         last_wc_y_int = wc_y_int;
         last_wc_y_frac = y_frac;
     }
@@ -143,8 +147,8 @@ void xhc_ui_update_coordinates(void)
     int32_t wc_z_int = z_negative ? -(int32_t)output_report.pos[2].p_int : (int32_t)output_report.pos[2].p_int;
 
     if (wc_z_int != last_wc_z_int || z_frac != last_wc_z_frac) {
-        sprintf(text, "%6d.%04d", z_negative ? -(int)output_report.pos[2].p_int : (int)output_report.pos[2].p_int, z_frac);
-        ST7735_WriteString(65, 32, text, Font_9, ST7735_BLACK, ST7735_WHITE);
+        format_coordinate(text, (int)output_report.pos[2].p_int, z_frac, z_negative);
+        ST7735_WriteString(50, 32, text, Font_9x12, ST7735_BLACK, ST7735_WHITE);
         last_wc_z_int = wc_z_int;
         last_wc_z_frac = z_frac;
     }
@@ -157,8 +161,8 @@ void xhc_ui_update_coordinates(void)
     int32_t mc_x_int = mx_negative ? -(int32_t)output_report.pos[3].p_int : (int32_t)output_report.pos[3].p_int;
 
     if (mc_x_int != last_mc_x_int || mx_frac != last_mc_x_frac) {
-        sprintf(text, "%6d.%04d", mx_negative ? -(int)output_report.pos[3].p_int : (int)output_report.pos[3].p_int, mx_frac);
-        ST7735_WriteString(65, 49, text, Font_9, ST7735_BLACK, ST7735_WHITE);
+        format_coordinate(text, (int)output_report.pos[3].p_int, mx_frac, mx_negative);
+        ST7735_WriteString(50, 49, text, Font_9x12, ST7735_BLACK, ST7735_WHITE);
         last_mc_x_int = mc_x_int;
         last_mc_x_frac = mx_frac;
     }
@@ -170,8 +174,8 @@ void xhc_ui_update_coordinates(void)
     int32_t mc_y_int = my_negative ? -(int32_t)output_report.pos[4].p_int : (int32_t)output_report.pos[4].p_int;
 
     if (mc_y_int != last_mc_y_int || my_frac != last_mc_y_frac) {
-        sprintf(text, "%6d.%04d", my_negative ? -(int)output_report.pos[4].p_int : (int)output_report.pos[4].p_int, my_frac);
-        ST7735_WriteString(65, 64, text, Font_9, ST7735_BLACK, ST7735_WHITE);
+    	format_coordinate(text, (int)output_report.pos[4].p_int, my_frac, my_negative);
+        ST7735_WriteString(50, 64, text, Font_9x12, ST7735_BLACK, ST7735_WHITE);
         last_mc_y_int = mc_y_int;
         last_mc_y_frac = my_frac;
     }
@@ -183,8 +187,8 @@ void xhc_ui_update_coordinates(void)
     int32_t mc_z_int = mz_negative ? -(int32_t)output_report.pos[5].p_int : (int32_t)output_report.pos[5].p_int;
 
     if (mc_z_int != last_mc_z_int || mz_frac != last_mc_z_frac) {
-        sprintf(text, "%6d.%04d", mz_negative ? -(int)output_report.pos[5].p_int : (int)output_report.pos[5].p_int, mz_frac);
-        ST7735_WriteString(65, 79, text, Font_9, ST7735_BLACK, ST7735_WHITE);
+    	format_coordinate(text, (int)output_report.pos[5].p_int, mz_frac, mz_negative);
+        ST7735_WriteString(50, 79, text, Font_9x12, ST7735_BLACK, ST7735_WHITE);
         last_mc_z_int = mc_z_int;
         last_mc_z_frac = mz_frac;
     }
@@ -226,7 +230,8 @@ void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
     }
 
     sprintf(text, "%s  ", pos_text);
-    ST7735_WriteString(30, 98, text, Font_9, ST7735_WHITE, ST7735_BLUE);
+    ST7735_WriteString(30, 98, text, Font_9x12, ST7735_WHITE, ST7735_BLUE);
+
 
     /* Step Multiplier mit besserer Formatierung */
     uint8_t low_nibble = step_mul & 0x0F;

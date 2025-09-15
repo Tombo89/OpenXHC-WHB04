@@ -235,7 +235,7 @@ void ST7735_WriteString(uint16_t x, uint16_t y, const char* s,
             x = 0;
             y += font.height;
             if (y + font.height >= ST7735_HEIGHT) break;
-            if (*s == ' ') { s++; continue; }
+            //if (*s == ' ') { s++; continue; }
         }
         ST_WriteChar(x, y, *s, font, color, bgcolor);
         x += font.width;
