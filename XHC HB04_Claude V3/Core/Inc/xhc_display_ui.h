@@ -7,6 +7,9 @@
 #define DISPLAY_WIDTH   160
 #define DISPLAY_HEIGHT  128
 
+extern  uint16_t feed_percent;
+extern  uint16_t spin_percent;
+
 /* Funktionsprototypen */
 void xhc_ui_init(void);
 void xhc_ui_update_coordinates(void);

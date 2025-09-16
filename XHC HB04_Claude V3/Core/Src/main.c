@@ -115,6 +115,7 @@ int main(void)
   button_matrix_init();
   rotary_switch_init();
   xhc_ui_init();
+  xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
   //run_display_performance_tests();
 
   //fillScreen(WHITE);

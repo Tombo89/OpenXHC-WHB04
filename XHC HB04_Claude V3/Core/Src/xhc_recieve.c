@@ -5,7 +5,7 @@
 
 #include "XHC_DataStructures.h"
 #include <string.h>
-#include "ST7735.h"
+#include "st7735_dma.h"
 #include <stdio.h>
 #include "xhc_display_ui.h"
 #include "rotary_switch.h"
@@ -124,6 +124,9 @@ void xhc_process_received_data(void)
     }
 
     if (need_update) {
+
+
+
         xhc_ui_update_coordinates();
         last_display_update = current_time;
     }

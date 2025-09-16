@@ -33,17 +33,17 @@ uint8_t rotary_switch_read(void)
     uint8_t current_hw_pos = ROTARY_OFF;
 
     if (!HAL_GPIO_ReadPin(ROT_POS1_GPIO_Port, ROT_POS1_Pin))
-        current_hw_pos = ROTARY_A;
-    else if (!HAL_GPIO_ReadPin(ROT_POS2_GPIO_Port, ROT_POS2_Pin))
-        current_hw_pos = ROTARY_FEED;
-    else if (!HAL_GPIO_ReadPin(ROT_POS3_GPIO_Port, ROT_POS3_Pin))
-        current_hw_pos = ROTARY_SPINDLE;
-    else if (!HAL_GPIO_ReadPin(ROT_POS4_GPIO_Port, ROT_POS4_Pin))
-        current_hw_pos = ROTARY_Z;
-    else if (!HAL_GPIO_ReadPin(ROT_POS5_GPIO_Port, ROT_POS5_Pin))
-        current_hw_pos = ROTARY_Y;
-    else if (!HAL_GPIO_ReadPin(ROT_POS6_GPIO_Port, ROT_POS6_Pin))
         current_hw_pos = ROTARY_X;
+    else if (!HAL_GPIO_ReadPin(ROT_POS2_GPIO_Port, ROT_POS2_Pin))
+        current_hw_pos = ROTARY_Y;
+    else if (!HAL_GPIO_ReadPin(ROT_POS3_GPIO_Port, ROT_POS3_Pin))
+        current_hw_pos = ROTARY_Z;
+    else if (!HAL_GPIO_ReadPin(ROT_POS4_GPIO_Port, ROT_POS4_Pin))
+        current_hw_pos = ROTARY_SPINDLE;
+    else if (!HAL_GPIO_ReadPin(ROT_POS5_GPIO_Port, ROT_POS5_Pin))
+        current_hw_pos = ROTARY_FEED;
+    else if (!HAL_GPIO_ReadPin(ROT_POS6_GPIO_Port, ROT_POS6_Pin))
+        current_hw_pos = ROTARY_A;
     // else bleibt ROTARY_OFF
 
     /* Entprellung und OFF-Verzögerung */
