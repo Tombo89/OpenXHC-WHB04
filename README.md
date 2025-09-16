@@ -1,7 +1,8 @@
 # OpenXHC-WHB04
 
 
-this is a rebuild of the Repository https://github.com/moonglow/openxhc ## OpenXHC
+this is a rebuild of the Repository https://github.com/moonglow/openxhc 
+
 This Repository consists all the information and code you need to build this Projekt. It is build in Keil UVision and supports varios Displays.
 
 I Rebuild this Projekt in Cube Ide and changed some things.
