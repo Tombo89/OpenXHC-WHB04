@@ -15,7 +15,8 @@ I Rebuild this Projekt in Cube Ide and changed some things.
 I tested the functionality with Mach 4 Demo ( no Hardware owned) and Beamicon2 so far. But it should work with any software that recognices the Original HB04.
 The Buttons can be remapped to your likings in code.
 
-I build a custom PCB, and 3d Printed enclosure. The top cover foil is made with simple tools.
+I build a custom PCB, and 3d Printed enclosure. 
+The top cover foil is made with simple tools. It is not perfekt, but as I added some domes with a heated river, it gives the Buttons a nice Click.
 
 The Pcb comes assembled from Jlcpcb for around 10€ a piece, but min. order quantity is 5.
 The pushbuttons, Rotary and Display are handsoldered.
