@@ -275,7 +275,12 @@ void ST7735_DrawRectFast(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                          uint16_t color, uint16_t thickness);
 void ST7735_DrawRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
                      uint16_t color, uint16_t thickness);
-void ST7735_barProgress(uint16_t x, uint16_t y, uint16_t w, uint16_t h, int v);
+void ST7735_barProgressRange(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                             int v, int min_p, int max_p,
+                             uint16_t col_left, uint16_t col_right,
+                             uint16_t col_bg, uint16_t col_mid,
+                             uint16_t gap);
+
 
 
 #ifdef __cplusplus
