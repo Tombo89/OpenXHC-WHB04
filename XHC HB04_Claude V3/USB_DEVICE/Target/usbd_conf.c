@@ -618,11 +618,15 @@ void HAL_PCDEx_SetConnectionState(PCD_HandleTypeDef *hpcd, uint8_t state)
   if (state == 1)
   {
     /* Configure Low connection state. */
+	    // CONNECT: internen 1k5-Pull-Up an D+ einschalten
+
 
   }
   else
   {
     /* Configure High connection state. */
+	  // DISCONNECT: Pull-Up aus
+
 
   }
   /* USER CODE END 6 */

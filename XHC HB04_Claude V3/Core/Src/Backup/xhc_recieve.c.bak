@@ -7,6 +7,8 @@
 #include <string.h>
 #include "ST7735.h"
 #include <stdio.h>
+#include "xhc_display_ui.h"
+#include "rotary_switch.h"
 
 /* Konstanten für den Empfang */
 #define TMP_BUFF_SIZE   42
@@ -77,35 +79,61 @@ void xhc_recv(uint8_t *data)
  */
 void xhc_process_received_data(void)
 {
+    static uint32_t last_position_values[6] = {0};
+    static uint32_t last_display_update = 0;
+    static uint32_t update_count = 0;
+    static uint8_t settling_mode = 1;  // Anfangs mehr Updates
 
+    uint32_t current_time = HAL_GetTick();
 
-    char text[32];
+    uint8_t need_update = 0;
+    uint8_t any_change = 0;
 
-    // Einfacher Test: Zeige X-Position
-    sprintf(text, "X: %d.%04d", output_report.pos[0].p_int, output_report.pos[0].p_frac);
+    // Prüfe jede Achse einzeln
+    for (int i = 0; i < 6; i++) {
+        uint32_t current_value = (output_report.pos[i].p_int << 16) |
+                                (output_report.pos[i].p_frac & 0x7FFF);
 
-    ST7735_WriteString(0, 0, text, Font_7x10, RED,BLACK);
+        uint32_t diff = (current_value > last_position_values[i]) ?
+                       (current_value - last_position_values[i]) :
+                       (last_position_values[i] - current_value);
 
-    // Zeige ob Daten gültig sind
-    sprintf(text, "Magic: 0x%04X", output_report.magic);
-    ST7735_WriteString(0, 30, text, Font_7x10, RED,BLACK);;
-    /* Hier können die empfangenen Daten verarbeitet werden:
-     * - LCD-Display aktualisieren
-     * - LEDs ansteuern
-     * - Position anzeigen
-     * - Geschwindigkeiten anzeigen
-     * - etc.
-     */
+        // *** ADAPTIVE SCHWELLE ***
+        uint32_t threshold = settling_mode ? 1 : 10;  // Anfangs sehr empfindlich
 
-    /* Debug-Callback aufrufen */
-    #ifdef XHC_DEBUG_ENABLED
-    extern void xhc_debug_callback(void);
-    xhc_debug_callback();
-    #endif
+        if (diff >= threshold) {
+            any_change = 1;
+            last_position_values[i] = current_value;
+        }
+    }
 
-    /* Beispiel: Setze Flag für LCD-Rendering */
-    // g_render_lcd = 1;
-}
+    // Update-Entscheidung
+    if (any_change) {
+        need_update = 1;
+        update_count++;
+
+        // Nach 20 Updates weniger empfindlich werden
+        if (update_count >= 20) {
+            settling_mode = 0;
+
+        }
+    }
+    // Fallback: Alle 100ms
+    else if ((current_time - last_display_update) >= 100) {
+        need_update = 1;
+    }
+
+    if (need_update) {
+        xhc_ui_update_coordinates();
+        last_display_update = current_time;
+    }
+
+    if ((current_time - last_display_update) >= 500) {
+            xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
+        }
+        last_display_update = current_time;
+    }
+
 
 /**
  * @brief Hilfsfunktion um die empfangenen Positionsdaten zu extrahieren

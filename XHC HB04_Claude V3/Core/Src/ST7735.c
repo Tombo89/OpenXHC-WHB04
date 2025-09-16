@@ -1,4 +1,10 @@
 #include <ST7735.h>
+#include <string.h>
+
+
+
+#define ST_COLOR_BURST_PIXELS 128
+static uint8_t st_color_burst_buf[ST_COLOR_BURST_PIXELS * 2];
 
 
 int16_t _width;       ///< Display width as modified by current rotation
@@ -344,4 +350,268 @@ void ST7735_InvertColors(bool invert) {
     ST7735_Unselect();
 }
 
+/**
+ * @brief Schreibt einzelnes Zeichen mit GFX Font
+ * @param x X-Position
+ * @param y Y-Position
+ * @param c Zeichen
+ * @param gfxFont GFX Font Struktur
+ * @param color Textfarbe
+ * @param bgcolor Hintergrundfarbe
+ */
+void ST7735_WriteChar_GFX(uint16_t x, uint16_t y, char c, const GFXfont *gfxFont,
+                          uint16_t color, uint16_t bgcolor)
+{
+    if (!gfxFont) return;
+
+    // Zeichen-Bereich prüfen
+    if ((c < gfxFont->first) || (c > gfxFont->last)) {
+        return;
+    }
+
+    // Glyph-Array als richtige Struktur casten
+    const GFXglyph *glyph_array = (const GFXglyph *)gfxFont->glyph;
+
+    // Entsprechendes Glyph finden
+    uint8_t glyph_index = (uint8_t)(c - gfxFont->first);
+    const GFXglyph *glyph = &glyph_array[glyph_index];
+
+    // Bitmap-Daten extrahieren
+    const uint8_t *bitmap = gfxFont->bitmap + glyph->bitmapOffset;
+
+    // *** AUTOMATISCHE Y-KORREKTUR ***
+    // Für die meisten GFX Fonts ist der Y-Offset ca. 55% der yAdvance
+    int16_t y_correction = (gfxFont->yAdvance * 55) / 100;
+
+    // Zeichen rendern mit automatischer Y-Korrektur
+    uint16_t bo = 0;
+    for (uint8_t yy = 0; yy < glyph->height; yy++) {
+        for (uint8_t xx = 0; xx < glyph->width; xx++) {
+
+            uint8_t byte_pos = bo / 8;
+            uint8_t bit_pos = 7 - (bo % 8);
+            uint8_t bit = (bitmap[byte_pos] >> bit_pos) & 1;
+
+            if (bit) {
+                ST7735_DrawPixel(x + glyph->xOffset + xx,
+                               y + y_correction + glyph->yOffset + yy, color);
+            } else if (bgcolor != color) {
+                ST7735_DrawPixel(x + glyph->xOffset + xx,
+                               y + y_correction + glyph->yOffset + yy, bgcolor);
+            }
+
+            bo++;
+        }
+    }
+}
+
+/**
+ * @brief Schreibt String mit GFX Font
+ * @param x Start X-Position
+ * @param y Start Y-Position
+ * @param str String
+ * @param gfxFont GFX Font Struktur
+ * @param color Textfarbe
+ * @param bgcolor Hintergrundfarbe
+ */
+void ST7735_WriteString_GFX(uint16_t x, uint16_t y, const char* str,
+                           const GFXfont *gfxFont, uint16_t color, uint16_t bgcolor)
+{
+    if (!gfxFont || !str) return;
+
+    // *** ERWEITERTE CACHE-LOGIK für 6 Positionen ***
+    static char last_strings[6][20] = {"", "", "", "", "", ""};
+    static uint16_t last_positions[6][2] = {{0,0}, {0,0}, {0,0}, {0,0}, {0,0}, {0,0}};
+
+    // Präzise Position-Index basierend auf Y-Koordinate
+    uint8_t pos_index = 0;
+    if (y >= 15 && y < 25) pos_index = 1;       // WC Y (Y=17)
+    else if (y >= 30 && y < 40) pos_index = 2;  // WC Z (Y=32)
+    else if (y >= 45 && y < 55) pos_index = 3;  // MC X (Y=49)
+    else if (y >= 60 && y < 70) pos_index = 4;  // MC Y (Y=64)
+    else if (y >= 75 && y < 85) pos_index = 5;  // MC Z (Y=79)
+    // pos_index = 0 für alle anderen (WC X bei Y=2)
+
+    // Prüfe ob String sich geändert hat
+    if (strcmp(str, last_strings[pos_index]) != 0 ||
+        x != last_positions[pos_index][0] || y != last_positions[pos_index][1]) {
+
+        // Präzise löschen
+        uint16_t text_width = ST7735_GetStringWidth_GFX(str, gfxFont);
+        uint16_t old_width = ST7735_GetStringWidth_GFX(last_strings[pos_index], gfxFont);
+        uint16_t max_width = (text_width > old_width) ? text_width : old_width;
+
+        // Kleine Höhe für dichten Text
+        ST7735_FillRectangle(x, y, max_width + 2, 12, bgcolor);
+
+        // Cache aktualisieren
+        strncpy(last_strings[pos_index], str, 19);
+        last_strings[pos_index][19] = '\0';
+        last_positions[pos_index][0] = x;
+        last_positions[pos_index][1] = y;
+    }
+
+    ST7735_Select();
+
+    uint16_t cursor_x = x;
+    uint16_t cursor_y = y;
+
+    const GFXglyph *glyph_array = (const GFXglyph *)gfxFont->glyph;
+
+    while (*str) {
+        char c = *str++;
+
+        if (c == '\n') {
+            cursor_x = x;
+            cursor_y += gfxFont->yAdvance;
+            continue;
+        }
+
+        if ((c < gfxFont->first) || (c > gfxFont->last)) {
+            continue;
+        }
+
+        if (cursor_x >= _width) {
+            cursor_x = x;
+            cursor_y += gfxFont->yAdvance;
+            if (cursor_y >= _height) {
+                break;
+            }
+        }
+
+        uint8_t glyph_index = c - gfxFont->first;
+        const GFXglyph *glyph = &glyph_array[glyph_index];
+
+        ST7735_WriteChar_GFX(cursor_x, cursor_y, c, gfxFont, color, bgcolor);
+
+        cursor_x += glyph->xAdvance;
+    }
+
+    ST7735_Unselect();
+}
+
+/**
+ * @brief Berechnet String-Breite mit GFX Font
+ * @param str String
+ * @param gfxFont GFX Font
+ * @return Breite in Pixeln
+ */
+uint16_t ST7735_GetStringWidth_GFX(const char* str, const GFXfont *gfxFont)
+{
+    if (!gfxFont || !str) return 0;
+
+    uint16_t width = 0;
+    const GFXglyph *glyph_array = (const GFXglyph *)gfxFont->glyph;
+
+    while (*str) {
+        char c = *str++;
+
+        if ((c >= gfxFont->first) && (c <= gfxFont->last)) {
+            uint8_t glyph_index = c - gfxFont->first;
+            const GFXglyph *glyph = &glyph_array[glyph_index];
+            width += glyph->xAdvance;
+        }
+    }
+
+    return width;
+}
+
+/**
+ * @brief Test-Funktion für GFX Fonts
+ */
+void test_gfx_fonts(void)
+{
+    // Hintergrund löschen
+    ST7735_FillScreen(BLACK);
+
+    // FreeSansBold9pt Font testen
+    ST7735_WriteString_GFX(10, 30, "XHC-HB04", &FreeSansBold9pt7b, WHITE, BLACK);
+    ST7735_WriteString_GFX(10, 55, "GFX Font Test", &FreeSansBold9pt7b, YELLOW, BLACK);
+
+    // Zahlen testen
+    ST7735_WriteString_GFX(10, 80, "X: 123.456", &FreeSansBold9pt7b, GREEN, BLACK);
+    ST7735_WriteString_GFX(10, 105, "Y: -78.901", &FreeSansBold9pt7b, RED, BLACK);
+
+    // Vergleich mit normaler Font
+    ST7735_WriteString(10, 130, "Normal Font", Font_7x10, CYAN, BLACK);
+}
+
+
+
+// Eigene Funktionen
+
+static void ST7735_WriteColorBurst(uint16_t color, uint32_t pixel_count)
+{
+    // Puffer einmal mit Farbwert füllen
+    uint8_t hi = color >> 8, lo = color & 0xFF;
+    for (int i = 0; i < ST_COLOR_BURST_PIXELS; ++i) {
+        st_color_burst_buf[2*i]   = hi;
+        st_color_burst_buf[2*i+1] = lo;
+    }
+
+    HAL_GPIO_WritePin(DC_PORT, DC_PIN, GPIO_PIN_SET); // Data mode
+
+    while (pixel_count) {
+        uint32_t chunk = (pixel_count > ST_COLOR_BURST_PIXELS) ? ST_COLOR_BURST_PIXELS : pixel_count;
+        HAL_SPI_Transmit(&ST7735_SPI_PORT, st_color_burst_buf, (uint16_t)(chunk * 2), HAL_MAX_DELAY);
+        pixel_count -= chunk;
+    }
+}
+
+// Clipping-Helfer, wie bei dir in FillRectangle
+static inline void st_clip_rect(uint16_t *x, uint16_t *y, uint16_t *w, uint16_t *h, uint16_t W, uint16_t H)
+{
+    if (*x >= W || *y >= H) { *w = *h = 0; return; }
+    if (*x + *w > W) *w = W - *x;
+    if (*y + *h > H) *h = H - *y;
+}
+
+void ST7735_DrawRectFast(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                         uint16_t color, uint16_t thickness)
+{
+    if (w == 0 || h == 0 || thickness == 0) return;
+
+    // Clipping vorbereiten (lokale Kopien, um Original nicht zu verändern)
+    uint16_t X = x, Y = y, W = w, H = h;
+    st_clip_rect(&X, &Y, &W, &H, _width, _height);
+    if (W == 0 || H == 0) return;
+
+    // Kanten-Geometrie
+    uint16_t top_h    = (thickness < H) ? thickness : H;
+    uint16_t bottom_h = top_h;
+    uint16_t left_w   = (thickness < W) ? thickness : W;
+    uint16_t right_w  = left_w;
+
+    ST7735_Select();
+
+    // Oben (X..X+W-1, Y..Y+top_h-1)
+    ST7735_SetAddressWindow(X, Y, X + W - 1, Y + top_h - 1);
+    ST7735_WriteColorBurst(color, (uint32_t)W * top_h);
+
+    // Unten (X..X+W-1, Y+H-bottom_h..Y+H-1)
+    if (H > top_h) {
+        ST7735_SetAddressWindow(X, Y + H - bottom_h, X + W - 1, Y + H - 1);
+        ST7735_WriteColorBurst(color, (uint32_t)W * bottom_h);
+    }
+
+    // Links (X..X+left_w-1, Y+top_h..Y+H-bottom_h-1)
+    if (H > (top_h + bottom_h) && left_w) {
+        uint16_t v_h = H - top_h - bottom_h;
+        ST7735_SetAddressWindow(X, Y + top_h, X + left_w - 1, Y + top_h + v_h - 1);
+        ST7735_WriteColorBurst(color, (uint32_t)left_w * v_h);
+    }
+
+    // Rechts (X+W-right_w..X+W-1, Y+top_h..Y+H-bottom_h-1)
+    if (H > (top_h + bottom_h) && right_w && W > left_w) {
+        uint16_t v_h = H - top_h - bottom_h;
+        ST7735_SetAddressWindow(X + W - right_w, Y + top_h, X + W - 1, Y + top_h + v_h - 1);
+        ST7735_WriteColorBurst(color, (uint32_t)right_w * v_h);
+    }
+
+    ST7735_Unselect();
+}
+
+/**
+ * @brief Erweiterte UI-Update-Funktion mit GFX Font
+ */
 
