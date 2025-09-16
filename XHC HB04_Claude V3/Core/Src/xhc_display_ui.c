@@ -9,6 +9,8 @@
 
 
 static uint8_t ui_initialized = 0;
+static uint8_t lastposition = 0;
+
 
 
 // kleine Helfer
@@ -28,7 +30,7 @@ void xhc_ui_init(void)
     if (ui_initialized) return;
 
     /* Gesamtes Display weiß machen */
-
+    ST7735_DrawRectFast(50, 15, 108, Font_9x12.height + 2, ST7735_BLUE, 1);
 
     /* WC-Bereich statische Labels - SCHWARZ auf WEISS */
     ST7735_WriteString(2, 2, "WC", Font_9x12, ST7735_BLACK, ST7735_WHITE);
@@ -74,7 +76,9 @@ void xhc_ui_init(void)
 
     //ST7735_WriteString(130, 98, "100%", Font_7x10, WHITE, BLUE);
     //ST7735_WriteString(130, 115, "100%", Font_7x10, WHITE, BLUE);
-
+    //ST7735_DrawRect(60, 2, 98, 13, ST7735_BLUE,1); // WC X
+    //ST7735_DrawRect(60, 17, 98, 13, ST7735_BLUE,1); // WC Y
+    //ST7735_DrawRect(60, 32, 98, 13, ST7735_BLUE,1); // WC Z
     ui_initialized = 1;
 }
 
@@ -216,6 +220,7 @@ void xhc_ui_update_coordinates(void)
 
 void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
 {
+
     char text[10];
 
     /* Rotary Position */
@@ -232,6 +237,25 @@ void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
     sprintf(text, "%s  ", pos_text);
     ST7735_WriteString(30, 98, text, Font_9x12, ST7735_WHITE, ST7735_BLUE);
 
+    if (lastposition != rotary_pos) {
+        switch(lastposition) {
+            case ROTARY_X: ST7735_DrawRect(39, 1, 120, 15, ST7735_WHITE,1); ; break;
+            case ROTARY_Y: ST7735_DrawRect(39, 16, 120, 15, ST7735_WHITE,1); ; break;
+            case ROTARY_Z: ST7735_DrawRect(39, 31, 120, 15, ST7735_WHITE,1); ; break;
+            //case ROTARY_FEED: ; break;
+            //case ROTARY_SPINDLE: ; break;
+            //case ROTARY_A:  ; break;
+        }
+        switch(rotary_pos) {
+            case ROTARY_X: ST7735_DrawRect(39, 1, 120, 15, ST7735_BLUE,1); ; break;
+            case ROTARY_Y: ST7735_DrawRect(39, 16, 120, 15, ST7735_BLUE,1); ; break;
+            case ROTARY_Z: ST7735_DrawRect(39, 31, 120, 15, ST7735_BLUE,1); ; break;
+            //case ROTARY_FEED:  ; break;
+            //case ROTARY_SPINDLE:  ; break;
+            //case ROTARY_A:  ; break;
+        }
+        lastposition=rotary_pos;
+    }
 
     /* Step Multiplier mit besserer Formatierung */
     uint8_t low_nibble = step_mul & 0x0F;

@@ -271,6 +271,10 @@ void ST7735_SetAddressWindow(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1);
 void ST7735_MoveRectFrame(uint16_t prev_x, uint16_t new_x,
                           uint16_t y, uint16_t w, uint16_t h,
                           uint16_t bg, uint16_t fg);
+void ST7735_DrawRectFast(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                         uint16_t color, uint16_t thickness);
+void ST7735_DrawRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                     uint16_t color, uint16_t thickness);
 
 #ifdef __cplusplus
 }

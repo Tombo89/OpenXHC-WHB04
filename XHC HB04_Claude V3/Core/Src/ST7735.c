@@ -2,6 +2,11 @@
 #include <string.h>
 
 
+
+#define ST_COLOR_BURST_PIXELS 128
+static uint8_t st_color_burst_buf[ST_COLOR_BURST_PIXELS * 2];
+
+
 int16_t _width;       ///< Display width as modified by current rotation
 int16_t _height;      ///< Display height as modified by current rotation
 int16_t cursor_x;     ///< x location to start print()ing text
@@ -529,6 +534,81 @@ void test_gfx_fonts(void)
 
     // Vergleich mit normaler Font
     ST7735_WriteString(10, 130, "Normal Font", Font_7x10, CYAN, BLACK);
+}
+
+
+
+// Eigene Funktionen
+
+static void ST7735_WriteColorBurst(uint16_t color, uint32_t pixel_count)
+{
+    // Puffer einmal mit Farbwert füllen
+    uint8_t hi = color >> 8, lo = color & 0xFF;
+    for (int i = 0; i < ST_COLOR_BURST_PIXELS; ++i) {
+        st_color_burst_buf[2*i]   = hi;
+        st_color_burst_buf[2*i+1] = lo;
+    }
+
+    HAL_GPIO_WritePin(DC_PORT, DC_PIN, GPIO_PIN_SET); // Data mode
+
+    while (pixel_count) {
+        uint32_t chunk = (pixel_count > ST_COLOR_BURST_PIXELS) ? ST_COLOR_BURST_PIXELS : pixel_count;
+        HAL_SPI_Transmit(&ST7735_SPI_PORT, st_color_burst_buf, (uint16_t)(chunk * 2), HAL_MAX_DELAY);
+        pixel_count -= chunk;
+    }
+}
+
+// Clipping-Helfer, wie bei dir in FillRectangle
+static inline void st_clip_rect(uint16_t *x, uint16_t *y, uint16_t *w, uint16_t *h, uint16_t W, uint16_t H)
+{
+    if (*x >= W || *y >= H) { *w = *h = 0; return; }
+    if (*x + *w > W) *w = W - *x;
+    if (*y + *h > H) *h = H - *y;
+}
+
+void ST7735_DrawRectFast(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                         uint16_t color, uint16_t thickness)
+{
+    if (w == 0 || h == 0 || thickness == 0) return;
+
+    // Clipping vorbereiten (lokale Kopien, um Original nicht zu verändern)
+    uint16_t X = x, Y = y, W = w, H = h;
+    st_clip_rect(&X, &Y, &W, &H, _width, _height);
+    if (W == 0 || H == 0) return;
+
+    // Kanten-Geometrie
+    uint16_t top_h    = (thickness < H) ? thickness : H;
+    uint16_t bottom_h = top_h;
+    uint16_t left_w   = (thickness < W) ? thickness : W;
+    uint16_t right_w  = left_w;
+
+    ST7735_Select();
+
+    // Oben (X..X+W-1, Y..Y+top_h-1)
+    ST7735_SetAddressWindow(X, Y, X + W - 1, Y + top_h - 1);
+    ST7735_WriteColorBurst(color, (uint32_t)W * top_h);
+
+    // Unten (X..X+W-1, Y+H-bottom_h..Y+H-1)
+    if (H > top_h) {
+        ST7735_SetAddressWindow(X, Y + H - bottom_h, X + W - 1, Y + H - 1);
+        ST7735_WriteColorBurst(color, (uint32_t)W * bottom_h);
+    }
+
+    // Links (X..X+left_w-1, Y+top_h..Y+H-bottom_h-1)
+    if (H > (top_h + bottom_h) && left_w) {
+        uint16_t v_h = H - top_h - bottom_h;
+        ST7735_SetAddressWindow(X, Y + top_h, X + left_w - 1, Y + top_h + v_h - 1);
+        ST7735_WriteColorBurst(color, (uint32_t)left_w * v_h);
+    }
+
+    // Rechts (X+W-right_w..X+W-1, Y+top_h..Y+H-bottom_h-1)
+    if (H > (top_h + bottom_h) && right_w && W > left_w) {
+        uint16_t v_h = H - top_h - bottom_h;
+        ST7735_SetAddressWindow(X + W - right_w, Y + top_h, X + W - 1, Y + top_h + v_h - 1);
+        ST7735_WriteColorBurst(color, (uint32_t)right_w * v_h);
+    }
+
+    ST7735_Unselect();
 }
 
 /**
