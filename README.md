@@ -16,7 +16,7 @@ I tested the functionality with Mach 4 Demo ( no Hardware owned) and Beamicon2 s
 The Buttons can be remapped to your likings in code. There are more values that need customization between software. Like the Percentage bar Values of Feed and Speed overwrite. 
 They differ from Software to Software. I startet to make a user_define.h File, where the important values can be changed easily.
 
-**Please be aware that this is still a work in Progress, and there can be bugs in the code. So use it with caution. If you recognize any bugs, fell free to report them.**
+**Please be aware that this is still a work in Progress, and there can be bugs in the code. So use it with caution. If you recognize any bugs, feel free to report them.**
 
 
 I build a custom PCB, and 3d Printed enclosure. 
