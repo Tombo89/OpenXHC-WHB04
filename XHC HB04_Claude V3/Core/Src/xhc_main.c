@@ -12,13 +12,57 @@
 #include "xhc_display_ui.h"
 #include "GFX_FUNCTIONS.h"
 
+/* ---- Einstellungen ---- */
+#define DEBOUNCE_MS   15u
+#define HOLD_MS    400u
+#define REPEAT_MS  180u   // gern 120–200 feinjustieren
+
 /* Externe Variablen */
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 // Globale Zustandsvariablen
 static uint8_t current_btn1 = 0;
 static uint8_t current_btn2 = 0;
-static uint8_t current_wheel_mode = 0x11;
+static uint8_t current_wheel_mode = 0x00;
+
+static uint32_t last_button_scan = 0;
+
+/* Rohzustand und Debounce-Tracking */
+static uint8_t  raw1_prev = 0, raw2_prev = 0;
+static uint32_t raw_change_ms = 0;
+static uint8_t  prev1   = 0, prev2   = 0;   // entprellt vorher (für Flanken)
+
+/* Letzter stabiler Zustand (entprellt) */
+static uint8_t  stable1 = 0, stable2 = 0;
+
+/* Hold/Repeat-Zustand je aktiv gehaltenem Keycode (max 2 gleichzeitig) */
+typedef struct {
+    uint8_t  code;             // 0 = frei
+    uint32_t pressed_ms;
+    uint32_t next_repeat_ms;
+} hold_slot_t;
+
+static hold_slot_t slot1 = {0}, slot2 = {0};
+
+/* Policy: welche Keys dürfen Repeat? */
+static inline uint8_t key_allows_repeat(uint8_t code) {
+    switch (code) {
+        case BTN_Goto0:   return 1;   // von dir gewünscht
+        /* weitere Repeat-Keys hier ergänzen */
+        default:          return 0;   // Spindle & Co. NICHT wiederholen
+    }
+}
+
+/* Helpers */
+static inline uint8_t in_pair(uint8_t code, uint8_t a, uint8_t b) {
+    return (code != 0) && (code == a || code == b);
+}
+static inline void slot_start(hold_slot_t *s, uint8_t code, uint32_t now) {
+    s->code = code; s->pressed_ms = now; s->next_repeat_ms = now + HOLD_MS;
+}
+static inline void slot_stop_if(hold_slot_t *s, uint8_t code) {
+    if (s->code == code) s->code = 0;
+}
 
 
 volatile struct {
@@ -56,6 +100,12 @@ typedef enum {
 
 static main_state_t current_state = MAIN_STATE_ENCODER;
 static uint32_t last_state_time = 0;
+
+
+/* Helper: Flanke von "oben nach unten" (PRESS) erkennen */
+static inline uint8_t is_press_edge(uint8_t prev, uint8_t now) {
+    return (prev == 0 && now != 0);
+}
 
 /**
  * @brief Initialisierung der XHC Custom HID Integration
@@ -134,25 +184,91 @@ void xhc_main_loop(void)
 	        break;
 	    }
 
-	        case 1: {  // BUTTONS (entspannter: alle 20ms statt 25ms)
-	            if (current_time - last_button_scan >= 20) {
-	                uint8_t new_btn1, new_btn2;
-	                button_matrix_scan(&new_btn1, &new_btn2);
+	    case 1: {  // BUTTONS (alle 20 ms ist ok)
+	        if (current_time - last_button_scan >= 20) {
+	            uint8_t new_raw1 = 0, new_raw2 = 0;
+	            button_matrix_scan(&new_raw1, &new_raw2);  // deine bestehende Routine
 
-	                // Prüfe auf Änderungen
+	            // Debounce
+	            if (new_raw1 != raw1_prev || new_raw2 != raw2_prev) {
+	                raw1_prev = new_raw1;
+	                raw2_prev = new_raw2;
+	                raw_change_ms = current_time;
+	            }
+
+	            // Nur nach DEBOUNCE_MS übernehmen
+	            if (current_time - raw_change_ms >= DEBOUNCE_MS) {
+	                // Stabiler (entprellter) Zustand jetzt:
+	                uint8_t s1 = raw1_prev;
+	                uint8_t s2 = raw2_prev;
+
+	                // --- EVENT-GENERIERUNG PRO FRAME ---
+	                // Wir senden NUR Events (PRESS/REPEAT) als nonzero; sonst 0.
+	                uint8_t send1 = 0, send2 = 0;
+
+	                // 1) PRESS-Erkennung (neuer Key in s1/s2, der vorher nicht da war)
+	                if (s1 && !in_pair(s1, prev1, prev2)) {
+	                    send1 = s1;
+	                    // Repeat-Tracking starten, falls erlaubt
+	                    if (key_allows_repeat(s1)) slot_start(&slot1, s1, current_time);
+	                    else                       slot_stop_if(&slot1, s1);
+	                }
+	                if (s2 && !in_pair(s2, prev1, prev2)) {
+	                    if (!send1) send1 = s2; else send2 = s2;
+	                    if (key_allows_repeat(s2)) slot_start(&slot2, s2, current_time);
+	                    else                       slot_stop_if(&slot2, s2);
+	                }
+
+	                // 2) REPEAT für gehaltene Tasten (nur, wenn KEIN neuer PRESS den Slot belegt)
+	                // slot1
+	                if (!send1 || !send2) {
+	                    if (slot1.code && in_pair(slot1.code, s1, s2) && key_allows_repeat(slot1.code)) {
+	                        if (current_time >= slot1.next_repeat_ms) {
+	                            if (!send1) send1 = slot1.code; else if (!send2) send2 = slot1.code;
+	                            slot1.next_repeat_ms = current_time + REPEAT_MS;
+	                        }
+	                    } else if (slot1.code && !in_pair(slot1.code, s1, s2)) {
+	                        // losgelassen
+	                        slot1.code = 0;
+	                    }
+	                }
+	                // slot2
+	                if (!send1 || !send2) {
+	                    if (slot2.code && in_pair(slot2.code, s1, s2) && key_allows_repeat(slot2.code)) {
+	                        if (current_time >= slot2.next_repeat_ms) {
+	                            if (!send1) send1 = slot2.code; else if (!send2) send2 = slot2.code;
+	                            slot2.next_repeat_ms = current_time + REPEAT_MS;
+	                        }
+	                    } else if (slot2.code && !in_pair(slot2.code, s1, s2)) {
+	                        slot2.code = 0;
+	                    }
+	                }
+
+	                // 3) Ausgabe in deine bekannten Variablen:
+	                //    - Nur Events (PRESS/REPEAT) werden als nonzero gesendet,
+	                //    - zwischen den Events => 0, damit Host NICHT dauernd toggelt.
+	                uint8_t new_btn1 = send1;
+	                uint8_t new_btn2 = send2;
+
 	                if (new_btn1 != state_tracker.btn1_last || new_btn2 != state_tracker.btn2_last) {
 	                    current_btn1 = new_btn1;
 	                    current_btn2 = new_btn2;
 	                    state_tracker.btn1_last = new_btn1;
 	                    state_tracker.btn2_last = new_btn2;
-	                    state_tracker.button_changed = 1;
+	                    state_tracker.button_changed = 1;   // triggert dein USB-Sendecode
 	                }
-	                last_button_scan = current_time;
+
+	                // Stabilen Zustand für nächste Flankenerkennung merken
+	                stable1 = s1; stable2 = s2;
+	                prev1 = stable1; prev2 = stable2;
 	            }
-	            state = 2;
-	            break;
+
+	            last_button_scan = current_time;
 	        }
 
+	        state = 2;
+	        break;
+	    }
 	        case 2: { // ROTARY
 	            if (current_time - last_rotary_scan >= 50) {
 	                uint8_t new_wheel_mode = rotary_switch_read();
