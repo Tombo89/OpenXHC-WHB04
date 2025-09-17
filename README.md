@@ -13,7 +13,11 @@ I Rebuild this Projekt in Cube Ide and changed some things.
 - Works with STM32 F103c8t6 aka Bluepill
 
 I tested the functionality with Mach 4 Demo ( no Hardware owned) and Beamicon2 so far. But it should work with any software that recognices the Original HB04.
-The Buttons can be remapped to your likings in code.
+The Buttons can be remapped to your likings in code. There are more values that need customization between software. Like the Percentage bar Values of Feed and Speed overwrite. 
+They differ from Software to Software. I startet to make a user_define.h File, where the important values can be changed easily.
+
+Please be aware that this is still a work in Progress, and there can be bugs in the code. So use it with caution. If you recognize any bugs, fell free to report them.
+
 
 I build a custom PCB, and 3d Printed enclosure. 
 The top cover foil is made with simple tools. It is not perfekt, but as I added some domes with a heated river, it gives the Buttons a nice Click.
