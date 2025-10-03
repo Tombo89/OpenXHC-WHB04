@@ -5,7 +5,6 @@
 
 #include "main.h"
 #include "button_matrix.h"
-#include "stdio.h"
 #include "user_defines.h"
 
 /* Button-Matrix Hardware-Konfiguration */

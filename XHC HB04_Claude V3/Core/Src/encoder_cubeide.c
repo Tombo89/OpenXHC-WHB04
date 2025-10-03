@@ -4,8 +4,8 @@
  */
 
 #include "main.h"
-#include "xhc_main.h"
 #include "ST7735.h"
+#include <stdio.h>
 
 /* Encoder Hardware-Konfiguration */
 #define ENCODER_TIMER           TIM2
@@ -19,9 +19,6 @@ static int32_t enc_rem = 0; /* Rest-Impulse (0..3) */
 /* Globale Variablen für 1ms Abtastung */
 static volatile int16_t encoder_1ms_buffer = 0;
 static volatile uint8_t encoder_data_ready = 0;
-static volatile uint32_t last_encoder_time = 0;
-static volatile int16_t encoder_speed_buffer[10];  // Ringpuffer für Geschwindigkeit
-static volatile uint8_t speed_buffer_index = 0;
 static volatile int32_t impulse_buffer = 0;
 
 /**
@@ -108,26 +105,6 @@ int16_t encoder_read(void)
 }
 
 /**
- * @brief Prüft ob Encoder-Aktivität vorhanden ist (ohne Wert zu konsumieren)
- * @return 1 wenn Encoder bewegt wurde, 0 wenn keine Änderung
- */
-uint8_t encoder_has_activity(void)
-{
-    uint16_t cur = (uint16_t)__HAL_TIM_GET_COUNTER(&htim_encoder);
-    return (cur != enc_prev_cnt) ? 1 : 0;
-}
-
-/**
- * @brief Encoder zurücksetzen
- */
-void encoder_reset(void)
-{
-    __HAL_TIM_SET_COUNTER(&htim_encoder, 0);
-    enc_prev_cnt = 0;
-    enc_rem = 0;
-}
-
-/**
  * @brief Test-Funktion: Encoder-Werte auf Display anzeigen
  */
 void encoder_display_test(void)
@@ -202,68 +179,61 @@ void encoder_display_sent_values(void)
  */
 void encoder_1ms_poll(void)
 {
-	{
+    static uint16_t last_count = 0;
 
+    uint16_t current_count = TIM2->CNT;
+    int16_t diff = (int16_t)(current_count - last_count);
+    last_count = current_count;
 
-	    static uint16_t last_count = 0;
+    if (diff != 0) {
+        impulse_buffer += diff;
 
+        // 4 Impulse = 1 Rastung
+        int16_t detents = (int16_t)(impulse_buffer / 4);
+        if (detents != 0) {
+            impulse_buffer -= detents * 4;
 
-	    uint16_t current_count = TIM2->CNT;
-	    int16_t diff = (int16_t)(current_count - last_count);
-	    last_count = current_count;
-
-	    if (diff != 0) {
-	        impulse_buffer += diff;
-
-	        // 4 Impulse = 1 Rastung
-	        int16_t detents = (int16_t)(impulse_buffer / 4);
-	        if (detents != 0) {
-	            impulse_buffer -= detents * 4;
-
-
-	            __disable_irq();
-	            encoder_1ms_buffer += detents;  // AKKUMULIERUNG
-	            encoder_data_ready = 1;
-	            last_encoder_time = HAL_GetTick();
-	            __enable_irq();
-	        }
-	    }
-	}
+            __disable_irq();
+            encoder_1ms_buffer += detents;  // AKKUMULIERUNG
+            encoder_data_ready = 1;
+            __enable_irq();
+        }
+    }
 }
 
-	int16_t encoder_read_simple_speed(void)
-	{
-	    int16_t accumulated_detents = 0;
+int16_t encoder_read_simple_speed(void)
+{
+    int16_t accumulated_detents = 0;
 
-	    __disable_irq();
-	    if (encoder_data_ready) {
-	        accumulated_detents = encoder_1ms_buffer;
-	        encoder_1ms_buffer = 0;
-	        encoder_data_ready = 0;
-	    }
-	    __enable_irq();
+    __disable_irq();
+    if (encoder_data_ready) {
+        accumulated_detents = encoder_1ms_buffer;
+        encoder_1ms_buffer = 0;
+        encoder_data_ready = 0;
+    }
+    __enable_irq();
 
-	    if (accumulated_detents == 0) {
-	        return 0;
-	    }
+    if (accumulated_detents == 0) {
+        return 0;
+    }
 
-	    // Einfaches Speed-Mapping basierend auf akkumulierten Detents
-	    int16_t abs_detents = (accumulated_detents < 0) ? -accumulated_detents : accumulated_detents;
-	    int16_t speed;
+    // Einfaches Speed-Mapping basierend auf akkumulierten Detents
+    int16_t abs_detents = (accumulated_detents < 0) ? -accumulated_detents : accumulated_detents;
+    int16_t speed;
 
-	    if (abs_detents >= 5) {
-	        speed = 10;      // Sehr schnell (5+ Detents akkumuliert)
-	    } else if (abs_detents >= 3) {
-	        speed = 6;       // Schnell (3-4 Detents)
-	    } else if (abs_detents >= 2) {
-	        speed = 3;       // Mittel (2 Detents)
-	    } else {
-	        speed = 1;       // Langsam (1 Detent)
-	    }
+    if (abs_detents >= 5) {
+        speed = 10;      // Sehr schnell (5+ Detents akkumuliert)
+    } else if (abs_detents >= 3) {
+        speed = 6;       // Schnell (3-4 Detents)
+    } else if (abs_detents >= 2) {
+        speed = 3;       // Mittel (2 Detents)
+    } else {
+        speed = 1;       // Langsam (1 Detent)
+    }
 
-	    // Richtung beibehalten
-	    return (accumulated_detents < 0) ? -speed : speed;
-	}
+    // Richtung beibehalten
+    return (accumulated_detents < 0) ? -speed : speed;
+}
 
 
 /**
@@ -314,19 +284,14 @@ void encoder_reset_buffers(void)
     }
     encoder_data_ready = 0;
     // 1. Timer Hardware-Register zurücksetzen
-        uint16_t old_count = TIM2->CNT;
-        TIM2->CNT = 0;  // Hardware-Counter auf 0
-        if (old_count != 0) {
-            printf("Reset TIM2->CNT: %d\r\n", old_count);
-        }
+    uint16_t old_count = TIM2->CNT;
+    TIM2->CNT = 0;  // Hardware-Counter auf 0
+    if (old_count != 0) {
+        printf("Reset TIM2->CNT: %d\r\n", old_count);
+    }
 
-        // 2. Encoder-interne Variablen zurücksetzen
-        extern uint16_t enc_prev_cnt;  // Aus encoder_cubeide.c
-        extern int32_t enc_rem;        // Aus encoder_cubeide.c
-        enc_prev_cnt = 0;
-        enc_rem = 0;
-
-        // 3. Timing zurücksetzen
-        last_encoder_time = HAL_GetTick();
+    // 2. Encoder-interne Variablen zurücksetzen
+    enc_prev_cnt = 0;
+    enc_rem = 0;
     __enable_irq();
 }

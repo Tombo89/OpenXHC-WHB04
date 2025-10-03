@@ -5,8 +5,6 @@
 
 #include "XHC_DataStructures.h"
 #include <string.h>
-#include "st7735_dma.h"
-#include <stdio.h>
 #include "xhc_display_ui.h"
 #include "rotary_switch.h"
 
@@ -87,7 +85,6 @@ void xhc_process_received_data(void)
 
     // Timing
     static uint32_t last_coord_ts  = 0;
-    static uint32_t last_status_ts = 0;
     static uint8_t  settling_mode  = 1;   // anfänglich empfindlicher
     static uint16_t updates_since_settle = 0;
 
@@ -137,8 +134,6 @@ void xhc_process_received_data(void)
 
     if (status_changed) {
         xhc_ui_update_status_bar(rotary, step);
-        last_status_ts = now;
-
         // Caches erst NACH erfolgreichem Draw updaten
         last_feed      = feed;
         last_feed_ovr  = feed_ovr;

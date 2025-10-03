@@ -25,7 +25,6 @@ void rotary_switch_init(void)
 
 uint8_t rotary_switch_read(void)
 {
-    static uint8_t last_position = ROTARY_OFF;
     static uint32_t off_start_time = 0;
     static uint8_t stable_position = ROTARY_OFF;
 
@@ -66,7 +65,6 @@ uint8_t rotary_switch_read(void)
         stable_position = ROTARY_OFF;
     }
 
-    last_position = stable_position;
     return stable_position;
 }
 
