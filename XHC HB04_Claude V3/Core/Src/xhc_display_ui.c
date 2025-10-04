@@ -4,6 +4,7 @@
 #include "st7735_dma.h"
 #include "XHC_DataStructures.h"
 #include <stdio.h>
+#include "user_defines.h"
 
 
 
@@ -208,20 +209,7 @@ void xhc_ui_update_coordinates(void)
 
 
 
-    // Feedrate/Spindle - nur einmal pro Sekunde oder bei Änderung
-    static uint16_t last_feedrate = 0xFFFF, last_feedrate_ovr = 0xFFFF;
-    static uint32_t last_feed_update = 0;
-    uint32_t now = HAL_GetTick();
 
-    if (output_report.feedrate != last_feedrate ||
-        output_report.feedrate_ovr != last_feedrate_ovr ||
-        (now - last_feed_update > 1000)) {
-    	xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
-
-        last_feedrate = output_report.feedrate;
-        last_feedrate_ovr = output_report.feedrate_ovr;
-        last_feed_update = now;
-    }
 }
 
 void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
@@ -288,8 +276,11 @@ void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
 
 
     // Spindel Statusbar
-    uint16_t sspeed_percent = output_report.sspeed_ovr;
-    ST7735_barProgress(95, 95, 60, 8, sspeed_percent);
+    uint16_t sspeed_percent = output_report.sspeed_ovr / SPINDLE_PERCENT_DIVISOR;
+    ST7735_barProgressRange(95, 95, 60, 8, sspeed_percent, SPINDLE_PERCENT_MIN, SPINDLE_PERCENT_MAX,
+                            ST7735_RED, ST7735_GREEN,
+                            ST7735_WHITE, ST7735_BLACK,
+                            1);
     //ST7735_barProgress(95, 95, 60, 8);
 
     sprintf(text, "%3u%%", sspeed_percent);
@@ -301,8 +292,12 @@ void xhc_ui_update_status_bar(uint8_t rotary_pos, uint8_t step_mul)
 
 
     // Feedrate Statusbar
-    uint16_t feed_percent = output_report.feedrate_ovr / 100;
-    ST7735_barProgress(95, 105, 60, 8, feed_percent);
+    uint16_t feed_percent = output_report.feedrate_ovr / FEED_PERCENT_DIVISOR;
+    ST7735_barProgressRange(95, 105, 60, 8, feed_percent, FEED_PERCENT_MIN, FEED_PERCENT_MAX,
+                            ST7735_RED, ST7735_GREEN,
+                            ST7735_WHITE, ST7735_BLACK,
+                            1);
+    //ST7735_barProgressRange(95, 105, 60, 8, feed_percent);
     //ST7735_barProgress(95, 95, 60, 8);
 
     sprintf(text, "%3u%%", feed_percent);

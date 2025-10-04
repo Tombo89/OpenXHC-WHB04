@@ -79,64 +79,76 @@ void xhc_recv(uint8_t *data)
  */
 void xhc_process_received_data(void)
 {
-    static uint32_t last_position_values[6] = {0};
-    static uint32_t last_display_update = 0;
-    static uint32_t update_count = 0;
-    static uint8_t settling_mode = 1;  // Anfangs mehr Updates
+    // Caches
+    static uint32_t last_pos[6] = {0};
+    static uint16_t last_feed = 0xFFFF, last_feed_ovr = 0xFFFF;
+    static uint16_t last_spin = 0xFFFF, last_spin_ovr = 0xFFFF;
+    static uint8_t  last_step = 0xFF,   last_rotary = 0xFF, last_state = 0xFF;
 
-    uint32_t current_time = HAL_GetTick();
+    // Timing
+    static uint32_t last_coord_ts  = 0;
+    static uint32_t last_status_ts = 0;
+    static uint8_t  settling_mode  = 1;   // anfänglich empfindlicher
+    static uint16_t updates_since_settle = 0;
 
-    uint8_t need_update = 0;
-    uint8_t any_change = 0;
+    uint32_t now = HAL_GetTick();
 
-    // Prüfe jede Achse einzeln
+    // === 1) Positionsänderungen erkennen ===
+    uint8_t pos_changed = 0;
     for (int i = 0; i < 6; i++) {
-        uint32_t current_value = (output_report.pos[i].p_int << 16) |
-                                (output_report.pos[i].p_frac & 0x7FFF);
+        uint32_t cur = ((uint32_t)output_report.pos[i].p_int << 16)
+                     | ((uint32_t)output_report.pos[i].p_frac & 0x7FFF);
+        uint32_t prev = last_pos[i];
+        uint32_t diff = (cur > prev) ? (cur - prev) : (prev - cur);
 
-        uint32_t diff = (current_value > last_position_values[i]) ?
-                       (current_value - last_position_values[i]) :
-                       (last_position_values[i] - current_value);
-
-        // *** ADAPTIVE SCHWELLE ***
-        uint32_t threshold = settling_mode ? 1 : 10;  // Anfangs sehr empfindlich
-
-        if (diff >= threshold) {
-            any_change = 1;
-            last_position_values[i] = current_value;
+        uint32_t thr = settling_mode ? 1u : 10u;   // Anfangs sehr fein, später gröber
+        if (diff >= thr) {
+            last_pos[i] = cur;
+            pos_changed = 1;
         }
     }
-
-    // Update-Entscheidung
-    if (any_change) {
-        need_update = 1;
-        update_count++;
-
-        // Nach 20 Updates weniger empfindlich werden
-        if (update_count >= 20) {
-            settling_mode = 0;
-
-        }
-    }
-    // Fallback: Alle 100ms
-    else if ((current_time - last_display_update) >= 100) {
-        need_update = 1;
+    if (pos_changed && settling_mode && ++updates_since_settle >= 20) {
+        settling_mode = 0;
     }
 
-    if (need_update) {
+    // === 2) Statusänderungen erkennen ===
+    uint8_t rotary = rotary_switch_read();
+    uint16_t feed      = output_report.feedrate;
+    uint16_t feed_ovr  = output_report.feedrate_ovr;   // skaliert ihr im UI
+    uint16_t spin      = output_report.sspeed;
+    uint16_t spin_ovr  = output_report.sspeed_ovr;
+    uint8_t  step      = output_report.step_mul;
+    uint8_t  state     = output_report.state;
 
+    uint8_t status_changed =
+        (feed     != last_feed)     ||
+        (feed_ovr != last_feed_ovr) ||
+        (spin     != last_spin)     ||
+        (spin_ovr != last_spin_ovr) ||
+        (step     != last_step)     ||
+        (rotary   != last_rotary)   ||
+        (state    != last_state);
 
-
+    // === 3) Zeichnen (gezielt & mit Fallback) ===
+    if (pos_changed || (now - last_coord_ts >= 100)) {
         xhc_ui_update_coordinates();
-        last_display_update = current_time;
+        last_coord_ts = now;
     }
 
-    if ((current_time - last_display_update) >= 500) {
-            xhc_ui_update_status_bar(rotary_switch_read(), output_report.step_mul);
-        }
-        last_display_update = current_time;
-    }
+    if (status_changed) {
+        xhc_ui_update_status_bar(rotary, step);
+        last_status_ts = now;
 
+        // Caches erst NACH erfolgreichem Draw updaten
+        last_feed      = feed;
+        last_feed_ovr  = feed_ovr;
+        last_spin      = spin;
+        last_spin_ovr  = spin_ovr;
+        last_step      = step;
+        last_rotary    = rotary;
+        last_state     = state;
+    }
+}
 
 /**
  * @brief Hilfsfunktion um die empfangenen Positionsdaten zu extrahieren

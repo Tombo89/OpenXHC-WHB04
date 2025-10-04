@@ -12,13 +12,57 @@
 #include "xhc_display_ui.h"
 #include "GFX_FUNCTIONS.h"
 
+/* ---- Einstellungen ---- */
+#define DEBOUNCE_MS   15u
+#define HOLD_MS    400u
+#define REPEAT_MS  180u   // gern 120–200 feinjustieren
+
 /* Externe Variablen */
 extern USBD_HandleTypeDef hUsbDeviceFS;
 
 // Globale Zustandsvariablen
 static uint8_t current_btn1 = 0;
 static uint8_t current_btn2 = 0;
-static uint8_t current_wheel_mode = 0x11;
+static uint8_t current_wheel_mode = 0x00;
+
+static uint32_t last_button_scan = 0;
+
+/* Rohzustand und Debounce-Tracking */
+static uint8_t  raw1_prev = 0, raw2_prev = 0;
+static uint32_t raw_change_ms = 0;
+static uint8_t  prev1   = 0, prev2   = 0;   // entprellt vorher (für Flanken)
+
+/* Letzter stabiler Zustand (entprellt) */
+static uint8_t  stable1 = 0, stable2 = 0;
+
+/* Hold/Repeat-Zustand je aktiv gehaltenem Keycode (max 2 gleichzeitig) */
+typedef struct {
+    uint8_t  code;             // 0 = frei
+    uint32_t pressed_ms;
+    uint32_t next_repeat_ms;
+} hold_slot_t;
+
+static hold_slot_t slot1 = {0}, slot2 = {0};
+
+/* Policy: welche Keys dürfen Repeat? */
+static inline uint8_t key_allows_repeat(uint8_t code) {
+    switch (code) {
+        case BTN_Goto0:   return 1;   // von dir gewünscht
+        /* weitere Repeat-Keys hier ergänzen */
+        default:          return 0;   // Spindle & Co. NICHT wiederholen
+    }
+}
+
+/* Helpers */
+static inline uint8_t in_pair(uint8_t code, uint8_t a, uint8_t b) {
+    return (code != 0) && (code == a || code == b);
+}
+static inline void slot_start(hold_slot_t *s, uint8_t code, uint32_t now) {
+    s->code = code; s->pressed_ms = now; s->next_repeat_ms = now + HOLD_MS;
+}
+static inline void slot_stop_if(hold_slot_t *s, uint8_t code) {
+    if (s->code == code) s->code = 0;
+}
 
 
 volatile struct {
@@ -43,6 +87,38 @@ static struct {
     uint8_t force_keepalive : 1;
 } state_tracker = {0};
 
+static uint8_t pending_rotary_flush = 0;
+
+static void flush_encoder_detents(int32_t *accumulator,
+                                  uint32_t *last_wheel_activity,
+                                  uint32_t *last_send_timestamp,
+                                  uint32_t now)
+{
+    if (accumulator != NULL) {
+        __disable_irq();
+        *accumulator = 0;
+        __enable_irq();
+    }
+
+    encoder_reset_buffers();
+
+    for (int i = 0; i < 3; ++i) {
+        int16_t residue = encoder_read_1ms();
+        if (residue == 0) {
+            break;
+        }
+        encoder_reset_buffers();
+    }
+
+    if (last_wheel_activity != NULL) {
+        *last_wheel_activity = 0;
+    }
+
+    if (last_send_timestamp != NULL) {
+        *last_send_timestamp = now;
+    }
+}
+
 // State Machine für non-blocking Updates
 typedef enum {
     MAIN_STATE_ENCODER,
@@ -56,6 +132,12 @@ typedef enum {
 
 static main_state_t current_state = MAIN_STATE_ENCODER;
 static uint32_t last_state_time = 0;
+
+
+/* Helper: Flanke von "oben nach unten" (PRESS) erkennen */
+static inline uint8_t is_press_edge(uint8_t prev, uint8_t now) {
+    return (prev == 0 && now != 0);
+}
 
 /**
  * @brief Initialisierung der XHC Custom HID Integration
@@ -114,99 +196,150 @@ void xhc_main_loop(void)
 	    uint32_t current_time = HAL_GetTick();
 
 	    switch (state) {
-	    case 0: {  // ENCODER - ATOMIC OPERATIONS
-	        int16_t detents = encoder_read_1ms();
-	        if (detents != 0) {
-	            // *** ATOMIC: Disable interrupts während Accumulator-Zugriff ***
-	            __disable_irq();
-	            accumulator += detents;
-	            last_wheel_activity = current_time;
-	            __enable_irq();
+            case 0: {  // ENCODER - ATOMIC OPERATIONS
+                if (pending_rotary_flush) {
+                    flush_encoder_detents(&accumulator, &last_wheel_activity, &last_send, current_time);
+                    pending_rotary_flush = 0;
+                    state = 1;
+                    break;
+                }
 
-	            // Debug: Zeige verlorene Klicks
-	            static int32_t total_detents = 0;
-	            total_detents += detents;
-	            if (abs(detents) > 1) {
-	                printf("Fast encoder: %d (total: %ld)\r\n", detents, total_detents);
+                int16_t detents = encoder_read_1ms();
+                if (detents != 0) {
+                    uint8_t wheel_mode_snapshot = current_wheel_mode;
+
+                    if (wheel_mode_snapshot == ROTARY_OFF) {
+                        // Encoderbewegungen in OFF-Position komplett verwerfen
+                        // Dadurch kann sich kein Rest im Akkumulator sammeln,
+                        // der beim nächsten Aktivieren gefährliche Sprünge erzeugt.
+                        // Gleichzeitig vermeiden wir es den Activity-Timer zu berühren.
+                        static int32_t discarded_detents = 0;
+                        discarded_detents += detents;
+                        if (abs(discarded_detents) > 10) {
+                            printf("Discarding encoder detents while OFF: %ld\r\n", discarded_detents);
+                            discarded_detents = 0;
+                        }
+                    } else {
+                        // *** ATOMIC: Disable interrupts während Accumulator-Zugriff ***
+                        __disable_irq();
+                        accumulator += detents;
+                        last_wheel_activity = current_time;
+                        __enable_irq();
+
+                        // Debug: Zeige verlorene Klicks
+                        static int32_t total_detents = 0;
+                        total_detents += detents;
+                        if (abs(detents) > 1) {
+                            printf("Fast encoder: %d (total: %ld)\r\n", detents, total_detents);
+                        }
+                    }
+                }
+                state = 1;
+                break;
+            }
+
+	    case 1: {  // BUTTONS (alle 20 ms ist ok)
+	        if (current_time - last_button_scan >= 20) {
+	            uint8_t new_raw1 = 0, new_raw2 = 0;
+	            button_matrix_scan(&new_raw1, &new_raw2);  // deine bestehende Routine
+
+	            // Debounce
+	            if (new_raw1 != raw1_prev || new_raw2 != raw2_prev) {
+	                raw1_prev = new_raw1;
+	                raw2_prev = new_raw2;
+	                raw_change_ms = current_time;
 	            }
-	        }
-	        state = 1;
-	        break;
-	    }
 
-	        case 1: {  // BUTTONS (entspannter: alle 20ms statt 25ms)
-	            if (current_time - last_button_scan >= 20) {
-	                uint8_t new_btn1, new_btn2;
-	                button_matrix_scan(&new_btn1, &new_btn2);
+	            // Nur nach DEBOUNCE_MS übernehmen
+	            if (current_time - raw_change_ms >= DEBOUNCE_MS) {
+	                // Stabiler (entprellter) Zustand jetzt:
+	                uint8_t s1 = raw1_prev;
+	                uint8_t s2 = raw2_prev;
 
-	                // Prüfe auf Änderungen
+	                // --- EVENT-GENERIERUNG PRO FRAME ---
+	                // Wir senden NUR Events (PRESS/REPEAT) als nonzero; sonst 0.
+	                uint8_t send1 = 0, send2 = 0;
+
+	                // 1) PRESS-Erkennung (neuer Key in s1/s2, der vorher nicht da war)
+	                if (s1 && !in_pair(s1, prev1, prev2)) {
+	                    send1 = s1;
+	                    // Repeat-Tracking starten, falls erlaubt
+	                    if (key_allows_repeat(s1)) slot_start(&slot1, s1, current_time);
+	                    else                       slot_stop_if(&slot1, s1);
+	                }
+	                if (s2 && !in_pair(s2, prev1, prev2)) {
+	                    if (!send1) send1 = s2; else send2 = s2;
+	                    if (key_allows_repeat(s2)) slot_start(&slot2, s2, current_time);
+	                    else                       slot_stop_if(&slot2, s2);
+	                }
+
+	                // 2) REPEAT für gehaltene Tasten (nur, wenn KEIN neuer PRESS den Slot belegt)
+	                // slot1
+	                if (!send1 || !send2) {
+	                    if (slot1.code && in_pair(slot1.code, s1, s2) && key_allows_repeat(slot1.code)) {
+	                        if (current_time >= slot1.next_repeat_ms) {
+	                            if (!send1) send1 = slot1.code; else if (!send2) send2 = slot1.code;
+	                            slot1.next_repeat_ms = current_time + REPEAT_MS;
+	                        }
+	                    } else if (slot1.code && !in_pair(slot1.code, s1, s2)) {
+	                        // losgelassen
+	                        slot1.code = 0;
+	                    }
+	                }
+	                // slot2
+	                if (!send1 || !send2) {
+	                    if (slot2.code && in_pair(slot2.code, s1, s2) && key_allows_repeat(slot2.code)) {
+	                        if (current_time >= slot2.next_repeat_ms) {
+	                            if (!send1) send1 = slot2.code; else if (!send2) send2 = slot2.code;
+	                            slot2.next_repeat_ms = current_time + REPEAT_MS;
+	                        }
+	                    } else if (slot2.code && !in_pair(slot2.code, s1, s2)) {
+	                        slot2.code = 0;
+	                    }
+	                }
+
+	                // 3) Ausgabe in deine bekannten Variablen:
+	                //    - Nur Events (PRESS/REPEAT) werden als nonzero gesendet,
+	                //    - zwischen den Events => 0, damit Host NICHT dauernd toggelt.
+	                uint8_t new_btn1 = send1;
+	                uint8_t new_btn2 = send2;
+
 	                if (new_btn1 != state_tracker.btn1_last || new_btn2 != state_tracker.btn2_last) {
 	                    current_btn1 = new_btn1;
 	                    current_btn2 = new_btn2;
 	                    state_tracker.btn1_last = new_btn1;
 	                    state_tracker.btn2_last = new_btn2;
-	                    state_tracker.button_changed = 1;
+	                    state_tracker.button_changed = 1;   // triggert dein USB-Sendecode
 	                }
-	                last_button_scan = current_time;
+
+	                // Stabilen Zustand für nächste Flankenerkennung merken
+	                stable1 = s1; stable2 = s2;
+	                prev1 = stable1; prev2 = stable2;
 	            }
-	            state = 2;
-	            break;
+
+	            last_button_scan = current_time;
 	        }
 
+	        state = 2;
+	        break;
+	    }
 	        case 2: { // ROTARY
 	            if (current_time - last_rotary_scan >= 50) {
 	                uint8_t new_wheel_mode = rotary_switch_read();
 
-	                if (new_wheel_mode != state_tracker.wheel_mode_last) {
-	                    printf("Rotary change: %02X -> %02X - AGGRESSIVE RESET!\r\n",
-	                           state_tracker.wheel_mode_last, new_wheel_mode);
+                        if (new_wheel_mode != state_tracker.wheel_mode_last) {
+                            printf("Rotary change: %02X -> %02X - FLUSH\r\n",
+                                   state_tracker.wheel_mode_last, new_wheel_mode);
 
-	                    // *** AGGRESSIVES BUFFER-CLEARING ***
+                            flush_encoder_detents(&accumulator, &last_wheel_activity, &last_send, current_time);
+                            pending_rotary_flush = 1;
 
-	                    // 1. Lokalen Accumulator zurücksetzen
-	                    if (accumulator != 0) {
-	                        printf("Reset accumulator: %ld\r\n", accumulator);
-	                        accumulator = 0;
-	                    }
+                            current_wheel_mode = new_wheel_mode;
+                            state_tracker.wheel_mode_last = new_wheel_mode;
+                            state_tracker.wheel_mode_changed = 1;
 
-	                    // 2. Encoder-Buffer leeren (mehrfach!)
-	                    encoder_reset_buffers();
-
-	                    // 3. *** NEU: Mehrfach leeren bis wirklich leer ***
-	                    for (int i = 0; i < 5; i++) {
-	                        int16_t check = encoder_read_1ms();
-	                        if (check != 0) {
-	                            printf("Buffer not empty, retry %d: %d\r\n", i, check);
-	                            encoder_reset_buffers();
-	                            HAL_Delay(2);  // Kurze Pause
-	                        } else {
-	                            break;  // Buffer ist leer
-	                        }
-	                    }
-
-	                    // 4. *** NEU: Last wheel activity zurücksetzen ***
-	                    last_wheel_activity = 0;  // Verhindert alte Activity-Detection
-
-	                    // 5. *** NEU: USB-Send-Timer zurücksetzen um sofortige Sendung zu verhindern ***
-	                    last_send = current_time;
-
-	                    // 6. Hardware-Stabilisierung
-	                    HAL_Delay(10);
-
-	                    // 7. *** FINALER CHECK: Nochmal prüfen ob Buffer wirklich leer ***
-	                    int16_t final_check = encoder_read_1ms();
-	                    if (final_check != 0) {
-	                        printf("WARNING: Buffer still not empty: %d\r\n", final_check);
-	                        encoder_reset_buffers();  // Nochmal versuchen
-	                    }
-
-	                    // Mode wechseln
-	                    current_wheel_mode = new_wheel_mode;
-	                    state_tracker.wheel_mode_last = new_wheel_mode;
-	                    state_tracker.wheel_mode_changed = 1;
-
-	                    printf("Rotary switch complete. Buffer should be clean.\r\n");
-	                }
+                            printf("Rotary switch complete. Buffers cleared.\r\n");
+                        }
 	                last_rotary_scan = current_time;
 	            }
 
@@ -224,14 +357,12 @@ void xhc_main_loop(void)
 	            int8_t wheel_value = 0;
 
 	            // Adaptive USB-Send-Frequenz basierend auf Encoder-Aktivität
-	            uint32_t usb_interval;
-	            if (abs(accumulator) > 10) {
-	                usb_interval = 10;  // Bei schneller Bewegung: alle 10ms
-	            } else if (abs(accumulator) > 5) {
-	                usb_interval = 15;  // Bei mittlerer Bewegung: alle 15ms
-	            } else {
-	                usb_interval = 20;  // Bei langsamer Bewegung: alle 20ms
-	            }
+                    uint32_t usb_interval = 20;
+                    if (abs(accumulator) > 10) {
+                        usb_interval = 10;  // Bei schneller Bewegung: alle 10ms
+                    } else if (abs(accumulator) > 5) {
+                        usb_interval = 15;  // Bei mittlerer Bewegung: alle 15ms
+                    }
 
 	            // *** ATOMIC ACCUMULATOR READ ***
 	            int32_t current_accumulator;
@@ -266,7 +397,7 @@ void xhc_main_loop(void)
 	                last_keepalive = current_time;
 	            }
 
-	            if (need_send && (current_time - last_send >= 20)) {
+                    if (need_send && (current_time - last_send >= usb_interval)) {
 	                in_report.btn_1 = current_btn1;
 	                in_report.btn_2 = current_btn2;
 	                in_report.wheel_mode = current_wheel_mode;

@@ -386,36 +386,59 @@ void ST7735_DrawRect(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
     ST7735_FillRectangle(x + w - thickness, y, thickness, h, color);
 }
 
-void ST7735_barProgress(uint16_t x, uint16_t y, uint16_t w, uint16_t h, int v)
+// v: aktueller Wert in Prozent
+// min_p, max_p: sichtbarer Bereich (z.B. 0..200, 10..150, ...)
+// Farben frei wählbar; "gap" = optionaler Abstand (0/1) zwischen Mittellinie und Balken
+void ST7735_barProgressRange(uint16_t x, uint16_t y, uint16_t w, uint16_t h,
+                             int v, int min_p, int max_p,
+                             uint16_t col_left, uint16_t col_right,
+                             uint16_t col_bg, uint16_t col_mid,
+                             uint16_t gap)
 {
     if (w < 5 || h < 3) return;
 
-    // 1) Hintergrund
-    ST7735_FillRectangle(x, y, w, h, ST7735_WHITE);
+    // 1) Clamp Bereich und Wert
+    if (min_p > 100) min_p = 100;        // links existiert nur bis 100
+    if (max_p < 100) max_p = 100;        // rechts existiert nur ab 100
+    if (min_p < -1000) min_p = -1000;    // harte Klammern (nur Sicherheit)
+    if (max_p >  5000) max_p =  5000;
 
-    // 2) Mittellinie (100 %)
+    if (v < min_p) v = min_p;
+    if (v > max_p) v = max_p;
+
+    // 2) Hintergrund & Mittellinie
+    ST7735_FillRectangle(x, y, w, h, col_bg);
     uint16_t midx = x + (w / 2);
-    ST7735_FillRectangle(midx, y + 1, 1, h - 2, ST7735_BLACK);
+    ST7735_FillRectangle(midx, y + 1, 1, h - 2, col_mid);
 
-    // 3) Clamp v auf 0..200
-    if (v < 0)   v = 0;
-    if (v > 150) v = 150;
+    // 3) verfügbare Breite je Seite (ggf. kleiner "gap" neben der Mittellinie)
+    uint16_t right_avail = (uint16_t)(w - (w / 2) - 1);
+    uint16_t left_avail  = (uint16_t)(w / 2);
+    if (right_avail > gap) right_avail -= gap;
+    if (left_avail  > gap) left_avail  -= gap;
 
-    // 4) verfügbare Breite je Seite (ohne Mittellinie)
-    uint16_t right_avail = w - (w / 2) - 1;
-    uint16_t left_avail  = (w / 2);          // links nutzen wir volle Hälfte (ohne Mittellinie)
-
-    // 5) Balken zeichnen
-    if (v > 100) {
-        // 100..200% → 0..right_avail px rechts
-        uint16_t len = (uint16_t)(((uint32_t)(v - 100) * right_avail + 25) / 50);
-        if (len) ST7735_FillRectangle(midx + 1, y + 1, len, h - 2, ST7735_GREEN);
-    } else if (v < 100) {
-        // 100..0% → 0..left_avail px links (von der Mitte nach links wachsend)
-        uint16_t len = (uint16_t)(((uint32_t)(100 - v) * left_avail + 50) / 100);
-        if (len) ST7735_FillRectangle((uint16_t)(midx - len), y + 1, len, h - 2, ST7735_RED);
+    // 4) Balkenlängen berechnen (mit Rundung)
+    // Links: mappe 100..min_p  → 0..left_avail (größerer Len je näher an min_p)
+    if (v < 100 && min_p < 100 && left_avail > 0) {
+        uint32_t spanL = (uint32_t)(100 - min_p);         // z.B. 90 für 10..100
+        if (spanL == 0) spanL = 1;
+        uint32_t lenL = ((uint32_t)(100 - v) * left_avail + (spanL/2)) / spanL;
+        if (lenL > 0) {
+            uint16_t start_x = (uint16_t)(midx - gap - lenL);
+            ST7735_FillRectangle(start_x, y + 1, (uint16_t)lenL, h - 2, col_left);
+        }
     }
-    // v == 100 → nur Mittellinie
+
+    // Rechts: mappe 100..max_p → 0..right_avail
+    if (v > 100 && max_p > 100 && right_avail > 0) {
+        uint32_t spanR = (uint32_t)(max_p - 100);         // z.B. 50 für 100..150
+        if (spanR == 0) spanR = 1;
+        uint32_t lenR = ((uint32_t)(v - 100) * right_avail + (spanR/2)) / spanR;
+        if (lenR > 0) {
+            uint16_t start_x = (uint16_t)(midx + 1 + gap);
+            ST7735_FillRectangle(start_x, y + 1, (uint16_t)lenR, h - 2, col_right);
+        }
+    }
 }
 
 

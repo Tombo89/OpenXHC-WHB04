@@ -23,6 +23,7 @@ static volatile uint32_t last_encoder_time = 0;
 static volatile int16_t encoder_speed_buffer[10];  // Ringpuffer für Geschwindigkeit
 static volatile uint8_t speed_buffer_index = 0;
 static volatile int32_t impulse_buffer = 0;
+static volatile uint16_t encoder_last_count = 0;
 
 /**
  * @brief Encoder Hardware initialisieren
@@ -78,6 +79,7 @@ void encoder_init(void)
 
     /* Startwert merken */
     enc_prev_cnt = (uint16_t)__HAL_TIM_GET_COUNTER(&htim_encoder);
+    encoder_last_count = enc_prev_cnt;
     enc_rem = 0;
 }
 
@@ -205,12 +207,9 @@ void encoder_1ms_poll(void)
 	{
 
 
-	    static uint16_t last_count = 0;
-
-
-	    uint16_t current_count = TIM2->CNT;
-	    int16_t diff = (int16_t)(current_count - last_count);
-	    last_count = current_count;
+            uint16_t current_count = TIM2->CNT;
+            int16_t diff = (int16_t)(current_count - encoder_last_count);
+            encoder_last_count = current_count;
 
 	    if (diff != 0) {
 	        impulse_buffer += diff;
@@ -316,6 +315,7 @@ void encoder_reset_buffers(void)
     // 1. Timer Hardware-Register zurücksetzen
         uint16_t old_count = TIM2->CNT;
         TIM2->CNT = 0;  // Hardware-Counter auf 0
+        encoder_last_count = 0;
         if (old_count != 0) {
             printf("Reset TIM2->CNT: %d\r\n", old_count);
         }
